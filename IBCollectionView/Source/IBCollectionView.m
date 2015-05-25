@@ -110,6 +110,8 @@
     IBCollectionSelectionRegionView *_selectionRegionView;
     NSRect selectingRegionRect;
     BOOL selectingRegion;
+    
+    NSInteger _sectionCount;
 }
 
 @end
@@ -203,8 +205,18 @@
     return result;
 }
 
+- (NSInteger)sectionCount
+{
+    if (_sectionCount<0) {
+        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
+            _sectionCount = [_dataSource collectionViewSectionCount: self];
+    }
+    return _sectionCount;
+}
+
 -(void)reloadData
 {
+    _sectionCount = -1;
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
     [selecteds removeAllObjects];
     [visibleSectionViews removeAllObjects];
@@ -243,9 +255,7 @@
     [selecteds removeAllObjects];
     
     NSMutableArray *indexs = [NSMutableArray array];
-    NSInteger sectionCount = 0;
-    if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
-        sectionCount = [_dataSource collectionViewSectionCount: self];
+    NSInteger sectionCount = [self sectionCount];
     if (sectionCount > 0){
         for (NSInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++){
             NSInteger itemCount = 0;
@@ -582,9 +592,7 @@
     if (!_dataSource)
         return self.bounds.size;
     
-    NSInteger sectionCount = 0;
-    if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
-        sectionCount = [_dataSource collectionViewSectionCount: self];
+    NSInteger sectionCount = [self sectionCount];
     
     CGFloat contentHeight = 0;
     NSSize contentSize = NSMakeSize(self.bounds.size.width, contentHeight);
@@ -792,9 +800,7 @@
 -(NSIndexSet*)sectionIndexSetWithRect:(NSRect)rect
 {
     NSMutableIndexSet *indexSet = [NSMutableIndexSet indexSet];
-    NSInteger sectionCount = 0;
-    if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
-        sectionCount = [_dataSource collectionViewSectionCount: self];
+    NSInteger sectionCount = [self sectionCount];
     
     if (sectionCount == 0){
         isSectionViewMode = NO;

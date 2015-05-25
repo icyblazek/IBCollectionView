@@ -252,6 +252,11 @@
     [self updateDisplayWithRect: self.documentVisibleRect];
 }
 
+/**
+ *  updateLayout is used when there is any view related changes.
+ *  e.g. any IBSectionViewLayoutManager change should call this method.
+ *  reloadData will lose selection, but updateLayout will not.
+ */
 -(void)updateLayout;
 {
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];

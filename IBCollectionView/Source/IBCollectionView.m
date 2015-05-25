@@ -252,12 +252,11 @@
     [self updateDisplayWithRect: self.documentVisibleRect];
 }
 
--(void)reloadLayout;
+-(void)updateLayout;
 {
-    [self updateLayer];
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
     [sectionViewCacheFrames removeAllObjects];
- 
+    
     NSSize contentSize = [self documentContentSize];
     if (contentSize.height > self.bounds.size.height){
         CGFloat tmpY = self.bounds.size.height - contentSize.height;
@@ -266,6 +265,8 @@
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     
     [self updateDisplayWithRect: self.documentVisibleRect];
+    
+    [super layout];
 }
 
 -(void)setFrame:(NSRect)frameRect

@@ -112,6 +112,7 @@
     BOOL selectingRegion;
     
     NSInteger _sectionCount;
+    NSMutableDictionary *itemCountInSection;
 }
 
 @end
@@ -214,9 +215,26 @@
     return _sectionCount;
 }
 
+- (NSInteger)itemCountInSectionIndex:(NSInteger)sectionIndex
+{
+    NSInteger itemCount = 0;
+    if (itemCountInSection[@(sectionIndex)]) {
+        return [itemCountInSection[@(sectionIndex)] integerValue];
+    }
+    else{
+        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewItemCount:SectionIndex:)]){
+            itemCount = [_dataSource collectionViewItemCount: self SectionIndex: sectionIndex];
+            itemCountInSection[@(sectionIndex)] = @(itemCount);
+        }
+    }
+    return itemCount;
+}
+
 -(void)reloadData
 {
     _sectionCount = -1;
+    itemCountInSection = [[NSMutableDictionary alloc] init];
+    
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
     [selecteds removeAllObjects];
     [visibleSectionViews removeAllObjects];
@@ -231,6 +249,22 @@
     }else
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     [self scrollToTop];
+    [self updateDisplayWithRect: self.documentVisibleRect];
+}
+
+-(void)reloadLayout;
+{
+    [self updateLayer];
+    [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
+    [sectionViewCacheFrames removeAllObjects];
+ 
+    NSSize contentSize = [self documentContentSize];
+    if (contentSize.height > self.bounds.size.height){
+        CGFloat tmpY = self.bounds.size.height - contentSize.height;
+        [collectionContentView setFrame: NSMakeRect(0, tmpY, contentSize.width, contentSize.height)];
+    }else
+        [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
+    
     [self updateDisplayWithRect: self.documentVisibleRect];
 }
 
@@ -258,17 +292,13 @@
     NSInteger sectionCount = [self sectionCount];
     if (sectionCount > 0){
         for (NSInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++){
-            NSInteger itemCount = 0;
-            if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewItemCount:SectionIndex:)])
-                itemCount = [_dataSource collectionViewItemCount: self SectionIndex: sectionIndex];
+            NSInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
             for (NSInteger itemIndex = 0; itemIndex < itemCount; itemIndex++)
                 [indexs addObject: [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: itemIndex]];
         }
         [selecteds addObjectsFromArray: indexs];
     }else {
-        NSInteger itemCount = 0;
-        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewItemCount:SectionIndex:)])
-            itemCount = [_dataSource collectionViewItemCount: self SectionIndex: 0];
+        NSInteger itemCount = [self itemCountInSectionIndex:0];
         for (NSInteger itemIndex = 0; itemIndex < itemCount; itemIndex++)
             [indexs addObject: [IBSectionIndexSet sectionIndexSetWithSectionIndex: 0 ItemIndex: itemIndex]];
     }
@@ -580,9 +610,7 @@
     
     if (!layoutManager)
         layoutManager = [self defaultLayoutManager];
-    NSUInteger itemCount = 0;
-    if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewItemCount:SectionIndex:)])
-        itemCount = [_dataSource collectionViewItemCount: self SectionIndex: sectionIndex];
+    NSUInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
     layoutManager.itemCount = itemCount;
     return layoutManager;
 }

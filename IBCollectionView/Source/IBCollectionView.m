@@ -143,6 +143,7 @@
         self.allowRegionSelection = YES;
         self.allowSelection = YES;
         self.allowShiftSelection = YES;
+        self.distinctSingleDoubleClick = YES;
         
         [[NSNotificationCenter defaultCenter] addObserver: self
                                                  selector: @selector(onSynchronizedViewContentBoundsDidChange:)
@@ -515,9 +516,16 @@
             trackedMouseEvent = [itemView trackMouseEvent: theEvent];
         if (!trackedMouseEvent){
             if (theEvent.clickCount == 1){
-                [self performSelector: @selector(onItemViewSingleClick:) withObject: indexSet afterDelay: [NSEvent doubleClickInterval]];
+                if (self.distinctSingleDoubleClick) {
+                    [self performSelector: @selector(onItemViewSingleClick:) withObject: indexSet afterDelay: [NSEvent doubleClickInterval]];
+                }
+                else{
+                    [self onItemViewSingleClick:indexSet];
+                }
             }else if (theEvent.clickCount == 2){
-                [NSObject cancelPreviousPerformRequestsWithTarget: self];
+                if (self.distinctSingleDoubleClick) {
+                    [NSObject cancelPreviousPerformRequestsWithTarget: self];
+                }
                 [self onItemViewDoubleClick: indexSet];
             }
         }

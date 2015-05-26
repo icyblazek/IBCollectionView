@@ -209,8 +209,12 @@
 - (NSInteger)sectionCount
 {
     if (_sectionCount<0) {
-        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
+        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)]){
             _sectionCount = [_dataSource collectionViewSectionCount: self];
+        }
+        else{
+            _sectionCount = 0;
+        }
     }
     return _sectionCount;
 }
@@ -272,8 +276,6 @@
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     
     [self updateDisplayWithRect: self.documentVisibleRect];
-    
-    [super layout];
 }
 
 -(void)setFrame:(NSRect)frameRect

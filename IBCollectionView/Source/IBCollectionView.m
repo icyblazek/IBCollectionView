@@ -242,6 +242,8 @@
     [reusableViews removeAllObjects];
     [sectionViewCacheFrames removeAllObjects];
     
+    isSectionViewMode = [self sectionCount]>1;
+    
     NSSize contentSize = [self documentContentSize];
     if (contentSize.height > self.bounds.size.height){
         CGFloat tmpY = self.bounds.size.height - contentSize.height;
@@ -288,6 +290,22 @@
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     
     [self updateDisplayWithRect: self.documentVisibleRect];
+}
+
+- (NSPoint)scrollOffsetPoint;
+{
+    NSRect visibleRect = [[self contentView] documentVisibleRect];
+    return visibleRect.origin;
+}
+
+- (void)scrollToOffsetPoint:(NSPoint)p
+{
+    [collectionContentView scrollPoint:p];
+}
+
+-(void)scrollToTop
+{
+    [collectionContentView scrollPoint: NSMakePoint(0, 0)];
 }
 
 -(void)selectAll
@@ -407,6 +425,7 @@
 }
 
 #pragma mark ==================== Mouse & Keyboard Event
+
 - (NSView *)hitTest:(NSPoint)aPoint
 {
     NSView *tmpView = [super hitTest: aPoint];
@@ -595,10 +614,6 @@
 
 #pragma mark ==================== Private
 
--(void)scrollToTop
-{
-    [collectionContentView scrollPoint: NSMakePoint(0, 0)];
-}
 
 -(IBSectionViewLayoutManager*)defaultLayoutManager
 {
@@ -631,14 +646,15 @@
     CGFloat contentHeight = 0;
     NSSize contentSize = NSMakeSize(self.bounds.size.width, contentHeight);
     if (sectionCount == 0){
-        isSectionViewMode = NO;
         
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: 0];
         contentHeight = [layoutManager contentHeightWithLayoutWidht: self.bounds.size.width];
         if (contentHeight < self.bounds.size.height)
             contentHeight = self.bounds.size.height;
         contentSize.height = contentHeight;
+        
     }else {
+        
         CGFloat *sectionHeights = (CGFloat*)malloc(sizeof(CGFloat) * sectionCount);
         for (NSInteger index = 0; index < sectionCount; index++){
             IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: index];
@@ -837,10 +853,9 @@
     NSInteger sectionCount = [self sectionCount];
     
     if (sectionCount == 0){
-        isSectionViewMode = NO;
         return indexSet;
     }
-    isSectionViewMode = YES;
+    
     for (NSInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++){
         NSString *key = [NSString stringWithFormat: @"%ld", sectionIndex];
         NSRect sectionViewFrame = [[sectionViewCacheFrames objectForKey: key] rectValue];

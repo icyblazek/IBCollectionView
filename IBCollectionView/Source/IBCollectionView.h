@@ -68,6 +68,11 @@
 -(id)dequeueReusableViewWithIdentifier:(NSString *)identifier;
 
 -(void)reloadData;
+/**
+ *  updateLayout is used when there is any view related changes.
+ *  e.g. any IBSectionViewLayoutManager change should call this method.
+ *  reloadData will lose selection, but updateLayout will not.
+ */
 -(void)updateLayout;
 
 -(void)selectAll;
@@ -80,7 +85,7 @@
 -(IBSectionIndexSet*)itemIndexSetWithPoint:(NSPoint)point;
 -(NSRect)itemRectWithIndexSet:(IBSectionIndexSet*)indexSet;
 -(NSArray*)visibleItemIndexSets;
--(NSArray*)visibleSectionIndexSets;
+-(NSIndexSet*)visibleSectionIndexSets;
 
 -(NSArray*)visibleItemViews;
 -(IBCollectionItemView*)itemViewWithIndexSet:(IBSectionIndexSet*)indexSet;
@@ -99,6 +104,6 @@
 @property (assign) BOOL allowSelection;
 @property (assign) BOOL allowShiftSelection;
 @property (assign) BOOL fixedSectionHeaderView;
-@property (assign) BOOL distinctSingleDoubleClick;//set to NO the double click will send a single click signle as well, default value is YES
+@property (assign) BOOL distinctSingleDoubleClick; //set to NO the double click will send a single click signle as well, default value is YES
 
 @end

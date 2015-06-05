@@ -209,13 +209,11 @@
 
 - (NSInteger)sectionCount
 {
-    if (_sectionCount<0) {
-        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)]){
+    if (_sectionCount < 0) {
+        if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewSectionCount:)])
             _sectionCount = [_dataSource collectionViewSectionCount: self];
-        }
-        else{
+        else
             _sectionCount = 0;
-        }
     }
     return _sectionCount;
 }
@@ -223,9 +221,8 @@
 - (NSInteger)itemCountInSectionIndex:(NSInteger)sectionIndex
 {
     NSInteger itemCount = 0;
-    if (itemCountInSection[@(sectionIndex)]) {
-        return [itemCountInSection[@(sectionIndex)] integerValue];
-    }
+    if (itemCountInSection[@(sectionIndex)])
+        itemCount = [itemCountInSection[@(sectionIndex)] integerValue];
     else{
         if (_dataSource && [_dataSource respondsToSelector: @selector(collectionViewItemCount:SectionIndex:)]){
             itemCount = [_dataSource collectionViewItemCount: self SectionIndex: sectionIndex];
@@ -247,7 +244,7 @@
     [reusableViews removeAllObjects];
     [sectionViewCacheFrames removeAllObjects];
     
-    isSectionViewMode = [self sectionCount]>1;
+    isSectionViewMode = [self sectionCount] > 0;
     
     NSSize contentSize = [self documentContentSize];
     if (contentSize.height > self.bounds.size.height){
@@ -259,11 +256,6 @@
     [self updateDisplayWithRect: self.documentVisibleRect];
 }
 
-/**
- *  updateLayout is used when there is any view related changes.
- *  e.g. any IBSectionViewLayoutManager change should call this method.
- *  reloadData will lose selection, but updateLayout will not.
- */
 -(void)updateLayout;
 {
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
@@ -303,7 +295,7 @@
 
 - (void)scrollToOffsetPoint:(NSPoint)p
 {
-    [collectionContentView scrollPoint:p];
+    [collectionContentView scrollPoint: p];
 }
 
 -(void)scrollToTop
@@ -335,11 +327,18 @@
 
 -(void)selectItemWithIndexSet:(IBSectionIndexSet*)indexSet
 {
+    [selecteds removeAllObjects];
+    [selecteds addObject: indexSet];
     
+    [self updateDisplayWithRect: collectionContentView.visibleRect];
 }
+
 -(void)selectItemWithIndexSets:(NSArray*)indexSets
 {
+    [selecteds removeAllObjects];
+    [selecteds addObjectsFromArray: indexSets];
     
+    [self updateDisplayWithRect: collectionContentView.visibleRect];
 }
 
 -(void)deselect
@@ -350,12 +349,18 @@
 
 -(void)deselectItemWithIndexSet:(IBSectionIndexSet*)indexSet
 {
-    
+    if ([selecteds containsObject: indexSet]){
+        [selecteds removeObject: indexSet];
+        [self updateDisplayWithRect: collectionContentView.visibleRect];
+    }
 }
 
 -(void)deselectItemWithIndexSets:(NSArray*)indexSets
 {
-    
+    NSInteger beforeCount = selecteds.count;
+    [selecteds removeObjectsInArray: indexSets];
+    if (selecteds.count != beforeCount)
+        [self updateDisplayWithRect: collectionContentView.visibleRect];
 }
 
 -(IBSectionIndexSet*)itemIndexSetWithPoint:(NSPoint)point
@@ -365,9 +370,7 @@
         [sectionViewCacheFrames enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
             NSRect sectionRect = [(NSValue*)obj rectValue];
             if (NSPointInRect(point, sectionRect)){
-                
                 NSInteger sectionIndex = [(NSString*)key integerValue];
-                
                 IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: sectionIndex];
                 for (NSInteger i = 0; i < layoutManager.itemCount; i++){
                     IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: i];
@@ -397,22 +400,35 @@
 
 -(NSRect)itemRectWithIndexSet:(IBSectionIndexSet*)indexSet
 {
-    return NSZeroRect;
+    NSRect resultRect = NSZeroRect;
+    if (isSectionViewMode){
+        BOOL isExpand = YES;
+        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSectionIsExpand:SectionIndex:)])
+            isExpand = [_delegate collectionViewSectionIsExpand: self SectionIndex: indexSet.sectionIndex];
+        if (isExpand){
+            IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: indexSet.sectionIndex];
+            resultRect = [layoutManager itemRectOfIndex: indexSet.itemIndex];
+        }
+    }else {
+        IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: 0];
+        resultRect = [layoutManager itemRectOfIndex: indexSet.itemIndex];
+    }
+    return resultRect;
 }
 
 -(NSArray*)visibleItemIndexSets
 {
-    return nil;
+    return [self itemIndexsWithRect: collectionContentView.visibleRect];
 }
 
--(NSArray*)visibleSectionIndexSets
+-(NSIndexSet*)visibleSectionIndexSets
 {
-    return nil;
+    return [self sectionIndexSetWithRect: collectionContentView.visibleRect];
 }
 
 -(NSArray*)visibleItemViews
 {
-    return nil;
+    return  [visibleItemViews allValues];
 }
 
 -(IBCollectionItemView*)itemViewWithIndexSet:(IBSectionIndexSet*)indexSet
@@ -518,14 +534,11 @@
             if (theEvent.clickCount == 1){
                 if (self.distinctSingleDoubleClick) {
                     [self performSelector: @selector(onItemViewSingleClick:) withObject: indexSet afterDelay: [NSEvent doubleClickInterval]];
-                }
-                else{
+                }else
                     [self onItemViewSingleClick:indexSet];
-                }
             }else if (theEvent.clickCount == 2){
-                if (self.distinctSingleDoubleClick) {
+                if (self.distinctSingleDoubleClick)
                     [NSObject cancelPreviousPerformRequestsWithTarget: self];
-                }
                 [self onItemViewDoubleClick: indexSet];
             }
         }
@@ -641,7 +654,7 @@
     
     if (!layoutManager)
         layoutManager = [self defaultLayoutManager];
-    NSUInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
+    NSUInteger itemCount = [self itemCountInSectionIndex: sectionIndex];
     layoutManager.itemCount = itemCount;
     return layoutManager;
 }
@@ -656,15 +669,12 @@
     CGFloat contentHeight = 0;
     NSSize contentSize = NSMakeSize(self.bounds.size.width, contentHeight);
     if (sectionCount == 0){
-        
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: 0];
         contentHeight = [layoutManager contentHeightWithLayoutWidht: self.bounds.size.width];
         if (contentHeight < self.bounds.size.height)
             contentHeight = self.bounds.size.height;
         contentSize.height = contentHeight;
-        
     }else {
-        
         CGFloat *sectionHeights = (CGFloat*)malloc(sizeof(CGFloat) * sectionCount);
         for (NSInteger index = 0; index < sectionCount; index++){
             IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: index];
@@ -862,9 +872,8 @@
     NSMutableIndexSet *indexSet = [NSMutableIndexSet indexSet];
     NSInteger sectionCount = [self sectionCount];
     
-    if (sectionCount == 0){
+    if (sectionCount == 0)
         return indexSet;
-    }
     
     for (NSInteger sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++){
         NSString *key = [NSString stringWithFormat: @"%ld", sectionIndex];

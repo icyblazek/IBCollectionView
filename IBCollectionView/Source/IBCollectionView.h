@@ -68,6 +68,7 @@
 -(id)dequeueReusableViewWithIdentifier:(NSString *)identifier;
 
 -(void)reloadData;
+-(void)updateLayout;
 
 -(void)selectAll;
 -(void)selectItemWithIndexSet:(IBSectionIndexSet*)indexSet;
@@ -84,6 +85,10 @@
 -(NSArray*)visibleItemViews;
 -(IBCollectionItemView*)itemViewWithIndexSet:(IBSectionIndexSet*)indexSet;
 
+-(NSPoint)scrollOffsetPoint;
+-(void)scrollToOffsetPoint:(NSPoint)p;
+-(void)scrollToTop;
+
 -(id)itemDataAtIndexSet:(IBSectionIndexSet*)indexSet;
 
 @property (nonatomic, weak) id <IBCollectionViewDataSource> dataSource;
@@ -94,5 +99,6 @@
 @property (assign) BOOL allowSelection;
 @property (assign) BOOL allowShiftSelection;
 @property (assign) BOOL fixedSectionHeaderView;
+@property (assign) BOOL distinctSingleDoubleClick;//set to NO the double click will send a single click signle as well, default value is YES
 
 @end

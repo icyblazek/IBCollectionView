@@ -4,7 +4,7 @@
 //
 //  Created by Kevin Lu on 7/2/13.
 //  Copyright (c) 2013 Icyblaze. All rights reserved.
-//
+//  https://github.com/icyblazek/IBCollectionView
 
 #import "IBSectionIndexSet.h"
 
@@ -57,7 +57,7 @@
 
 -(NSString*)description
 {
-    return [NSString stringWithFormat: @"SectionIndexSet: %ld, %ld", _sectionIndex, _itemIndex];
+    return [NSString stringWithFormat: @"SectionIndexSet: %ld, %ld %p", _sectionIndex, _itemIndex, self];
 }
 
 @end

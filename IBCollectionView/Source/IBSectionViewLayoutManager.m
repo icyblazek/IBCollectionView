@@ -4,7 +4,7 @@
 //
 //  Created by Kevin on 15/12/14.
 //  Copyright (c) 2014 Icyblaze. All rights reserved.
-//
+//  https://github.com/icyblazek/IBCollectionView
 
 #import "IBSectionViewLayoutManager.h"
 
@@ -58,6 +58,29 @@
 -(CGFloat)sectionBottomViewHeight
 {
     return 20;
+}
+
+-(NSUInteger)countOfColumn
+{
+    NSSize itemSize = [self itemSize];
+    CGFloat itemWSpacing = [self itemViewWSpacing];
+    
+    CGFloat itemMarginMinX = [self itemViewMarginMinX];
+    CGFloat itemMarginMaxX = [self itemViewMarginMaxX];
+    
+    CGFloat usedWidth = _layoutWidth - (itemMarginMinX + itemMarginMaxX);
+    NSInteger itemCol = usedWidth / (itemSize.width + itemWSpacing);
+    
+    if (itemCol == 0)
+        itemCol = 1;
+    
+    return itemCol;
+}
+
+-(NSUInteger)columnOfIndex:(NSInteger)index
+{
+    NSInteger itemCol = [self countOfColumn];
+    return index % itemCol;
 }
 
 -(NSRect)itemRectOfIndex:(NSInteger)index

@@ -4,7 +4,7 @@
 //
 //  Created by Kevin on 15/12/14.
 //  Copyright (c) 2014 Icyblaze. All rights reserved.
-//
+//  https://github.com/icyblazek/IBCollectionView
 
 #import <Foundation/Foundation.h>
 
@@ -28,6 +28,9 @@
 -(NSRect)itemRectOfIndex:(NSInteger)index;
 -(NSInteger)itemIndexWithPoint:(NSPoint)point;
 -(CGFloat)contentHeightWithLayoutWidht:(CGFloat)layoutWidth;
+
+-(NSUInteger)countOfColumn;
+-(NSUInteger)columnOfIndex:(NSInteger)index;
 
 @property (assign) IBCollectionView *collectionView;
 @property (assign) NSInteger itemCount;

@@ -4,7 +4,7 @@
 //
 //  Created by Kevin on 15/12/14.
 //  Copyright (c) 2014 Icyblaze. All rights reserved.
-//  https://github.com/icyblazek/IBCollectionView
+//  
 
 #import "IBCollectionSectionView.h"
 

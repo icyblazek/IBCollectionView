@@ -12,7 +12,7 @@
 
 -(void)drawRect:(NSRect)dirtyRect
 {
-    [[NSColor controlDarkShadowColor] setFill];
+    [[NSColor blackColor] setFill];
     NSRectFill(self.bounds);
 }
 
@@ -31,12 +31,12 @@
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-    [[NSColor redColor] setFill];
-    NSRectFill(self.bounds);
-    
-    NSBezierPath *tmpPath = [NSBezierPath bezierPathWithRect: self.bounds];
-    [[NSColor blackColor] setStroke];
-    [tmpPath stroke];
+//    [[NSColor redColor] setFill];
+//    NSRectFill(self.bounds);
+//    
+//    NSBezierPath *tmpPath = [NSBezierPath bezierPathWithRect: self.bounds];
+//    [[NSColor blackColor] setStroke];
+//    [tmpPath stroke];
 }
 
 -(NSArray*)subviews

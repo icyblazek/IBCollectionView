@@ -449,7 +449,6 @@
 {
     if ([selecteds containsObject:indexSet]) {
         [selecteds removeObject:indexSet];
-        
         [self updateDisplayWithRect: collectionContentView.visibleRect];
         if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
             [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
@@ -486,7 +485,9 @@
                     itemRect = [self convertItemRect: itemRect fromSectionFrame: sectionRect];
                     if (NSPointInRect(point, itemRect)){
                         IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
-                        NSPoint p = [itemView convertPoint:point fromView:itemView.superview];
+                        NSPoint p = point;
+                        p.y -= itemView.superview.frame.origin.y;
+                        p = [itemView convertPoint:p fromView:itemView.superview];
                         if ([itemView clickTest:p]) {
                             result = indexSet;
                         }
@@ -520,36 +521,36 @@
 
 -(NSRect)itemRectWithIndexSet:(IBSectionIndexSet*)indexSet
 {
-    @try {
-        IBCollectionItemView *itemview = [self itemViewWithIndexSet:indexSet];
-        if (itemview) {
-            return itemview.frame;
+    NSRect resultRect = NSZeroRect;
+    if (isSectionViewMode){
+        BOOL isExpand = YES;
+        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSectionIsExpand:SectionIndex:)])
+            isExpand = [_delegate collectionViewSectionIsExpand: self SectionIndex: indexSet.sectionIndex];
+        if (isExpand){
+            IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: indexSet.sectionIndex];
+            resultRect = [layoutManager itemRectOfIndex: indexSet.itemIndex];
         }
-        else{
-            IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:indexSet.sectionIndex];
-            return [layoutManager itemRectOfIndex: indexSet.itemIndex];
-        }
     }
-    @catch (NSException *exception) {
+    else{
+        IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:indexSet.sectionIndex];
+        resultRect =  [layoutManager itemRectOfIndex: indexSet.itemIndex];
     }
-    @finally {
-    }
-    return NSZeroRect;
+    return resultRect;
 }
 
 -(NSArray*)visibleItemIndexSets
 {
-    return nil;
+    return [self itemIndexsWithRect: collectionContentView.visibleRect];
 }
 
--(NSArray*)visibleSectionIndexSets
+-(NSIndexSet*)visibleSectionIndexSets
 {
-    return nil;
+    return [self sectionIndexSetWithRect: collectionContentView.visibleRect];
 }
 
 -(NSArray*)visibleItemViews
 {
-    return nil;
+    return  [visibleItemViews allValues];
 }
 
 -(IBCollectionItemView*)itemViewWithIndexSet:(IBSectionIndexSet*)indexSet
@@ -576,6 +577,8 @@
 
 - (void)mouseMoved:(NSEvent *)theEvent;
 {
+    return;
+    
     NSPoint localPoint = [theEvent locationInWindow];
     localPoint = [collectionContentView convertPoint: localPoint fromView: nil];
     
@@ -617,6 +620,79 @@
     }
 }
 
+- (void)rightMouseDown:(NSEvent *)theEvent
+{
+    BOOL commandKeyDown = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
+    BOOL shiftKeyDown = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
+    BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
+   
+    if (commandKeyDown || shiftKeyDown || optionKeyDown) {
+        [super rightMouseDown:theEvent];
+        return;
+    }
+    
+    //BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
+    BOOL bNeedUpdateDisplay = NO;
+    
+    NSPoint localPoint = [collectionContentView convertPoint:[theEvent locationInWindow] fromView: nil];
+    
+    IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
+    if (![selecteds containsObject:indexSet]) {
+        //if the current click item already in selection. do not clean up selection.
+        if (selecteds.count > 0){
+            bNeedUpdateDisplay = YES;
+            [selecteds removeAllObjects];
+        }
+    }
+    
+    IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
+    if (indexSet && itemView){
+        localPoint = [itemView convertPoint: localPoint fromView: collectionContentView];
+        if ([itemView accpetSelectWithPoint: localPoint]){
+            [selecteds addObject: indexSet];
+            bNeedUpdateDisplay = YES;
+        }
+    }
+    
+    if (bNeedUpdateDisplay){
+        [self updateDisplayWithRect: self.documentVisibleRect];
+        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
+            [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
+    }
+    
+    BOOL trackedMouseEvent = NO;
+    if (indexSet && itemView){
+        if ([itemView accpetMouseEventWithEvent: theEvent])
+            trackedMouseEvent = [itemView trackMouseEvent: theEvent];
+        if (!trackedMouseEvent){
+            //if (theEvent.clickCount == 1)
+            {
+                [self onItemViewSingleClick:indexSet];
+                if (_delegate && [_delegate respondsToSelector: @selector(collectionViewMenu:IndextSet:)]){
+                    NSMenu *menu =  [self.delegate performSelector:@selector(collectionViewMenu:IndextSet:) withObject:self];
+                    if (menu) {
+                        localPoint = [collectionContentView convertPoint:[theEvent locationInWindow] fromView: nil];
+                        NSPoint menuOrigin = [[itemView superview] convertPoint:NSMakePoint(localPoint.x, localPoint.y) toView:nil];
+                        NSEvent *event =  [NSEvent mouseEventWithType:NSLeftMouseDown
+                                                             location:menuOrigin
+                                                        modifierFlags:NSLeftMouseDownMask // 0x100
+                                                            timestamp:0
+                                                         windowNumber:[[itemView window] windowNumber]
+                                                              context:[[itemView window] graphicsContext]
+                                                          eventNumber:0
+                                                           clickCount:1
+                                                             pressure:1];
+                        [NSMenu popUpContextMenu:menu withEvent:event forView:itemView];
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    NSLog(@"xxx");
+}
+
 -(void)mouseDown:(NSEvent *)theEvent
 {
     BOOL controlKeyPressed = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
@@ -629,6 +705,8 @@
     
     BOOL commandKeyDown = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
     BOOL shiftKeyDown = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
+    //BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
+    //BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
     BOOL bNeedUpdateDisplay = NO;
     
     if (!shiftKeyDown || commandKeyDown) {
@@ -678,6 +756,8 @@
         }
     }
     
+    
+    
     if (trackedMouseEvent)
         return;
     
@@ -702,6 +782,7 @@
             }
         }
     }
+    
 }
 
 -(void)mouseUp:(NSEvent *)theEvent

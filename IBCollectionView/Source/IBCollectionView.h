@@ -31,7 +31,7 @@
 //@optional
 //- (void)collectionViewItemDidSelected:(IBCollectionView*)collectionView;
 //- (void)collectionViewKeyDown:(IBCollectionView*)collectionView Event:(NSEvent*)theEvent;
-//- (NSMenu*)collectionViewMenu:(IBCollectionView*)collectionView IndextSet:(IBSectionIndexSet*)indexSet;
+- (NSMenu*)collectionViewMenu:(IBCollectionView*)collectionView IndextSet:(IBSectionIndexSet*)indexSet;
 //
 //// Drag & Drop
 //- (NSDragOperation)onCollectionViewDraggingEnter:(IBCollectionView*)collectionView DraggingInfo:(id <NSDraggingInfo>)sender;
@@ -84,7 +84,7 @@
 
 - (IBSectionIndexSet*)itemIndexSetWithPoint:(NSPoint)point;
 - (NSArray*)visibleItemIndexSets;
-- (NSArray*)visibleSectionIndexSets;
+- (NSIndexSet*)visibleSectionIndexSets;
 
 - (NSArray*)visibleItemViews;
 - (IBCollectionItemView*)itemViewWithIndexSet:(IBSectionIndexSet*)indexSet;

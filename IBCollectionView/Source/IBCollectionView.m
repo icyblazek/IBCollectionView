@@ -4,10 +4,16 @@
 //
 //  Created by Kevin on 15/12/14.
 //  Copyright (c) 2014 Icyblaze. All rights reserved.
-//
+//  https://github.com/icyblazek/IBCollectionView
 
 #import "IBCollectionView.h"
 #import <Carbon/Carbon.h>
+
+typedef enum {
+    IBCollectionContentViewStateNone            = 0,
+    IBCollectionContentViewStateSelecting       = 1,
+    IBCollectionContentViewStateDragging        = 2,
+} IBCollectionContentViewState;
 
 @interface IBCollectionContentView : NSView{
     
@@ -109,7 +115,9 @@
     NSPoint firstMouseDownPoint;
     IBCollectionSelectionRegionView *_selectionRegionView;
     NSRect selectingRegionRect;
-    BOOL selectingRegion;
+    IBCollectionContentViewState stateMode;
+    IBCollectionItemView *draggingItemView;
+    NSDraggingSession *draggingSession;
     
     NSInteger _sectionCount;
     NSMutableDictionary *itemCountInSection;
@@ -129,6 +137,8 @@
         [self setHasVerticalScroller: YES];
         [self setBorderType: NSBezelBorder];
         
+        stateMode = IBCollectionContentViewStateNone;
+        
         collectionContentView = [[IBCollectionContentView alloc] initWithFrame: self.bounds];
         [self setDocumentView: collectionContentView];
         
@@ -140,11 +150,8 @@
         visibleSectionViews = [[NSMutableDictionary alloc] init];
         visibleItemViews = [[NSMutableDictionary alloc] init];
         
-        self.allowRegionSelection = YES;
-        self.allowSelection = YES;
-        self.allowShiftSelection = YES;
+        self.selectionMode = IBCollectionViewSelectionMulitple;
         self.distinctSingleDoubleClick = YES;
-        self.allowArrowKeySelection = YES;
         
         [[NSNotificationCenter defaultCenter] addObserver: self
                                                  selector: @selector(onSynchronizedViewContentBoundsDidChange:)
@@ -352,7 +359,34 @@
     return selecteds;
 }
 
--(void)selectAll:(id)sender
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(validateMenuItem:)]){
+        return [[_delegate performSelector:@selector(validateMenuItem:) withObject:menuItem] boolValue];
+    }
+    return NO;
+}
+
+- (void)delete:(id)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(delete:)])
+        [_delegate performSelector:@selector(delete:) withObject:sender];
+}
+
+- (void)importAction:(id)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(importAction:)])
+        [_delegate performSelector:@selector(importAction:) withObject:self];
+}
+
+- (void)exportAction:(id)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(exportAction:)])
+        [_delegate performSelector:@selector(exportAction:) withObject:self];
+}
+
+
+- (void)selectAll:(id)sender
 {
     NSMutableArray *indexes = [NSMutableArray array];
     NSInteger sectionCount = [self sectionCount];
@@ -565,7 +599,7 @@
     return nil;
 }
 
-#pragma mark ==================== Mouse & Keyboard Event
+#pragma mark ==================== Mouse Event
 
 - (NSView *)hitTest:(NSPoint)aPoint
 {
@@ -574,11 +608,11 @@
         return collectionContentView;
     return tmpView;
 }
-
+    /*
 - (void)mouseMoved:(NSEvent *)theEvent;
 {
     return;
-    
+
     NSPoint localPoint = [theEvent locationInWindow];
     localPoint = [collectionContentView convertPoint: localPoint fromView: nil];
     
@@ -618,7 +652,9 @@
             }
         }
     }
+     
 }
+*/
 
 - (void)rightMouseDown:(NSEvent *)theEvent
 {
@@ -649,8 +685,10 @@
     if (indexSet && itemView){
         localPoint = [itemView convertPoint: localPoint fromView: collectionContentView];
         if ([itemView accpetSelectWithPoint: localPoint]){
-            [selecteds addObject: indexSet];
-            bNeedUpdateDisplay = YES;
+            if (![selecteds containsObject:indexSet]) {
+                [selecteds addObject: indexSet];
+                bNeedUpdateDisplay = YES;
+            }
         }
     }
     
@@ -660,37 +698,40 @@
             [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
     }
     
+    NSMenu *menu = nil;
     BOOL trackedMouseEvent = NO;
     if (indexSet && itemView){
         if ([itemView accpetMouseEventWithEvent: theEvent])
             trackedMouseEvent = [itemView trackMouseEvent: theEvent];
         if (!trackedMouseEvent){
             //if (theEvent.clickCount == 1)
-            {
-                [self onItemViewSingleClick:indexSet];
-                if (_delegate && [_delegate respondsToSelector: @selector(collectionViewMenu:IndextSet:)]){
-                    NSMenu *menu =  [self.delegate performSelector:@selector(collectionViewMenu:IndextSet:) withObject:self];
-                    if (menu) {
-                        localPoint = [collectionContentView convertPoint:[theEvent locationInWindow] fromView: nil];
-                        NSPoint menuOrigin = [[itemView superview] convertPoint:NSMakePoint(localPoint.x, localPoint.y) toView:nil];
-                        NSEvent *event =  [NSEvent mouseEventWithType:NSLeftMouseDown
-                                                             location:menuOrigin
-                                                        modifierFlags:NSLeftMouseDownMask // 0x100
-                                                            timestamp:0
-                                                         windowNumber:[[itemView window] windowNumber]
-                                                              context:[[itemView window] graphicsContext]
-                                                          eventNumber:0
-                                                           clickCount:1
-                                                             pressure:1];
-                        [NSMenu popUpContextMenu:menu withEvent:event forView:itemView];
-                    }
-                }
+            //{
+            //[self onItemViewSingleClick:indexSet];
+            if (_delegate && [_delegate respondsToSelector: @selector(collectionViewMenu:IndextSet:)]){
+                menu =  [self.delegate performSelector:@selector(collectionViewMenu:IndextSet:) withObject:self];
             }
+            //}
+        }
+    }
+    else{
+        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewMenu:)]){
+            menu =  [self.delegate performSelector:@selector(collectionViewMenu:) withObject:self];
         }
     }
     
+    if (menu) {
+        NSEvent *event =  [NSEvent mouseEventWithType:NSRightMouseDown
+                                             location:[theEvent locationInWindow]
+                                        modifierFlags:NSRightMouseDownMask // 0x100
+                                            timestamp:0
+                                         windowNumber:[[self window] windowNumber]
+                                              context:[[self window] graphicsContext]
+                                          eventNumber:0
+                                           clickCount:1
+                                             pressure:1];
+        [NSMenu popUpContextMenu:menu withEvent:event forView:collectionContentView];
+    }
     
-    NSLog(@"xxx");
 }
 
 -(void)mouseDown:(NSEvent *)theEvent
@@ -708,26 +749,69 @@
     //BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
     //BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
     BOOL bNeedUpdateDisplay = NO;
-    
-    if (!shiftKeyDown || commandKeyDown) {
-        //if user did not press shift key or user press cmd key, clean up current selections.
-        //This is Finder's behivour.
-        if (selecteds.count > 0){
-            bNeedUpdateDisplay = YES;
-            [selecteds removeAllObjects];
-        }
-    }
+    BOOL clickedOnSelection = NO;
     
     IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
     IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
     if (indexSet && itemView){
         localPoint = [itemView convertPoint: localPoint fromView: collectionContentView];
         if ([itemView accpetSelectWithPoint: localPoint]){
-            [selecteds addObject: indexSet];
-            bNeedUpdateDisplay = YES;
+            if ([selecteds containsObject:indexSet]) {
+                clickedOnSelection = YES;
+            }
         }
     }
     
+    if (!clickedOnSelection) {
+        stateMode = IBCollectionContentViewStateSelecting;
+        if (!shiftKeyDown || commandKeyDown) {
+            //if user did not press shift key or user press cmd key, clean up current selections.
+            //This is Finder's behivour.
+            if (selecteds.count > 0){
+                bNeedUpdateDisplay = YES;
+                [selecteds removeAllObjects];
+            }
+        }
+        else if(_selectionMode == IBCollectionViewSelectionSingle){
+            if (selecteds.count > 0){
+                bNeedUpdateDisplay = YES;
+                [selecteds removeAllObjects];
+            }
+        }
+        
+        if (indexSet && itemView){
+            if ([itemView accpetSelectWithPoint: localPoint]){
+                if (![selecteds containsObject:indexSet]) {
+                    [selecteds addObject:indexSet];
+                    bNeedUpdateDisplay = YES;
+                    if ([_delegate respondsToSelector:@selector(collectionViewDragPromisedFilesOfTypes:)]) {
+                        stateMode = IBCollectionContentViewStateDragging;
+                    }
+                    else{
+                        stateMode = IBCollectionContentViewStateSelecting;
+                    }
+                }
+            }
+        }
+    }
+    else{
+        if ([_delegate respondsToSelector:@selector(collectionViewDragPromisedFilesOfTypes:)]) {
+            stateMode = IBCollectionContentViewStateDragging;
+        }
+        else{
+            stateMode = IBCollectionContentViewStateSelecting;
+        }
+    }
+
+    if (_selectionMode == IBCollectionViewSelectionNone) {
+        [selecteds removeAllObjects];
+        bNeedUpdateDisplay = YES;
+        stateMode = IBCollectionContentViewStateNone;
+    }
+    
+    if (stateMode == IBCollectionContentViewStateSelecting) {
+        selectingRegionRect.origin = firstMouseDownPoint;
+    }
     
     if (bNeedUpdateDisplay){
         [self updateDisplayWithRect: self.documentVisibleRect];
@@ -757,20 +841,18 @@
     }
     
     
-    
-    if (trackedMouseEvent)
+    if (trackedMouseEvent){
+        stateMode = IBCollectionContentViewStateNone;
         return;
+    }
+    
     
     BOOL keepOn = YES;
     while (keepOn) {
         theEvent = [self.window nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask];
         switch ([theEvent type]) {
             case NSLeftMouseDragged:{
-                if (_allowRegionSelection && !_selectionRegionView){
-                    _selectionRegionView = [[IBCollectionSelectionRegionView alloc] initWithFrame: self.bounds];
-                    [self addSubview: _selectionRegionView];
-                }
-                [self trackMouseDraggedEvent: theEvent];
+                keepOn = [self trackMouseDraggedEvent: theEvent];
                 break;
             }
             case NSLeftMouseUp:
@@ -782,8 +864,8 @@
             }
         }
     }
-    
 }
+
 
 -(void)mouseUp:(NSEvent *)theEvent
 {
@@ -791,50 +873,173 @@
         [_selectionRegionView removeFromSuperview];
         _selectionRegionView = nil;
     }
-    selectingRegion = NO;
+    stateMode = IBCollectionContentViewStateNone;
+    draggingItemView = nil;
+    draggingSession = nil;
 }
 
--(void)trackMouseDraggedEvent:(NSEvent *)event
+
+-(BOOL)trackMouseDraggedEvent:(NSEvent *)event
 {
     NSPoint localPoint = [collectionContentView convertPoint:[event locationInWindow] fromView: nil];
     
-    if (_allowSelection && _allowRegionSelection){
-        selectingRegion = YES;
-        selectingRegionRect.origin = firstMouseDownPoint;
-        selectingRegionRect.size.width = localPoint.x - firstMouseDownPoint.x;
-        selectingRegionRect.size.height = localPoint.y - firstMouseDownPoint.y;
-        if (selectingRegionRect.size.width > 0 && selectingRegionRect.size.height < 0){
-            selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
-            selectingRegionRect.origin.y = localPoint.y;
-        }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height < 0){
-            selectingRegionRect.origin = localPoint;
-            selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
-            selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
-        }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height > 0){
-            selectingRegionRect.origin.x = localPoint.x;
-            selectingRegionRect.origin.y = firstMouseDownPoint.y;
-            selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
+    if (stateMode == IBCollectionContentViewStateSelecting){
+        
+        if (_selectionMode == IBCollectionViewSelectionMulitple) {
+            
+            if (!_selectionRegionView){
+                _selectionRegionView = [[IBCollectionSelectionRegionView alloc] initWithFrame: self.bounds];
+                [self addSubview: _selectionRegionView];
+            }
+            
+            selectingRegionRect.size.width = localPoint.x - firstMouseDownPoint.x;
+            selectingRegionRect.size.height = localPoint.y - firstMouseDownPoint.y;
+            if (selectingRegionRect.size.width > 0 && selectingRegionRect.size.height < 0){
+                selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
+                selectingRegionRect.origin.y = localPoint.y;
+            }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height < 0){
+                selectingRegionRect.origin = localPoint;
+                selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
+                selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
+            }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height > 0){
+                selectingRegionRect.origin.x = localPoint.x;
+                selectingRegionRect.origin.y = firstMouseDownPoint.y;
+                selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
+            }
+            
+            NSArray *itemIndexs = [self itemIndexsWithRect: selectingRegionRect];
+            [selecteds removeAllObjects];
+            [selecteds addObjectsFromArray: itemIndexs];
+            
+            [self updateDisplayWithRect: self.documentVisibleRect];
+            
+            if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
+                [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
+            
+            if (_selectionRegionView){
+                NSRect drawRect = [_selectionRegionView convertRect: selectingRegionRect fromView: collectionContentView];
+                [_selectionRegionView drawFrameWithRect: drawRect];
+            }
+            
+            [collectionContentView autoscroll: event];
         }
-        
-        NSArray *itemIndexs = [self itemIndexsWithRect: selectingRegionRect];
-        [selecteds removeAllObjects];
-        [selecteds addObjectsFromArray: itemIndexs];
+        else{
+            if (_selectionRegionView){
+                [_selectionRegionView removeFromSuperview];
+                _selectionRegionView = nil;
+            }
+        }
+       
+    }
+    else if (stateMode == IBCollectionContentViewStateDragging){
 
-        [self updateDisplayWithRect: self.documentVisibleRect];
-        
-        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
-            [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
-
-        if (_selectionRegionView){
-            NSRect drawRect = [_selectionRegionView convertRect: selectingRegionRect fromView: collectionContentView];
-            [_selectionRegionView drawFrameWithRect: drawRect];
+        if ([_delegate respondsToSelector:@selector(collectionViewDragPromisedFilesOfTypes:)]) {
+            if (draggingItemView == nil) {
+                
+                NSArray *list = [_delegate collectionViewDragPromisedFilesOfTypes: self];
+                
+                IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
+                draggingItemView = [self itemViewWithIndexSet:indexSet];
+                NSRect imageLocation;
+                imageLocation.origin = [self convertPoint:[event locationInWindow] fromView: nil];
+                imageLocation.size = NSMakeSize(32, 32);
+                
+                [self dragPromisedFilesOfTypes:list fromRect:imageLocation source:self slideBack:YES event:event];
+                return NO;
+            }
         }
     }
-    [collectionContentView autoscroll: event];
+    
+    return YES;
 }
 
--(void)navigateByArrowKey:(unsigned short)keyCode
+
+
+#pragma mark ==================== Dragging Source
+
+
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context
 {
+    /*------------------------------------------------------
+     NSDraggingSource protocol method.  Returns the types of operations allowed in a certain context.
+     --------------------------------------------------------*/
+    if (context == NSDraggingContextOutsideApplication) {
+        return NSDragOperationCopy;
+    }
+    return NSDragOperationNone;
+}
+
+- (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
+{
+    stateMode = IBCollectionContentViewStateNone;
+    draggingItemView = nil;
+    draggingSession = nil;
+}
+
+- (NSArray *)namesOfPromisedFilesDroppedAtDestination:(NSURL *)dropDestination
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionView:namesOfPromisedFilesDroppedAtDestination:)]){
+        return [_delegate collectionView:self namesOfPromisedFilesDroppedAtDestination:dropDestination];
+    }
+    return nil;
+}
+
+#pragma mark ==================== Dragging Destination
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionView:draggingEntered:)]){
+        NSDragOperation op =  [_delegate collectionView:self draggingEntered:sender];
+        if(op != NSDragOperationNone){
+            
+        }
+        return op;
+    }
+    return NSDragOperationNone;
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender
+{
+    
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionView:draggingUpdated:withIndexSet:)]){
+      
+        IBSectionIndexSet *idx = [self itemIndexSetWithPoint:[collectionContentView convertPoint:[sender draggingLocation] fromView: nil]];
+        NSDragOperation op = [_delegate collectionView:self draggingUpdated:sender withIndexSet:idx];
+        if(op != NSDragOperationNone){
+           
+        }
+        return op;
+    }
+    return NSDragOperationNone;
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionView:draggingExited:)]){
+        [_delegate collectionView:self draggingExited:sender];
+    }
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender
+{
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionView:performDragOperation:withIndexSet:)]){
+        IBSectionIndexSet *idx = [self itemIndexSetWithPoint:[collectionContentView convertPoint:[sender draggingLocation] fromView: nil]];
+        return [_delegate collectionView:self performDragOperation:sender withIndexSet:idx];
+    }
+    
+    return NO;
+}
+
+#pragma mark ==================== Keyboard Event
+
+
+
+-(void)navigateByArrowKey:(NSEvent*)theEvent
+{
+    unsigned short keyCode = [theEvent keyCode];
+    BOOL shiftKeyPressed = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
+    shiftKeyPressed = NO;
+    
     if (selecteds.count == 0){
         __block IBSectionIndexSet *idx = [IBSectionIndexSet sectionIndexSetWithSectionIndex:10000000000 ItemIndex:10000000000];
         [visibleItemViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
@@ -868,45 +1073,45 @@
     IBSectionIndexSet *minIndexSet = [tmpArray firstObject];
     IBSectionIndexSet *maxIndexSet = [tmpArray lastObject];
     
-
+    
     NSInteger sectionIndex = 0;
     NSInteger itemIndex = 0;
     
     /*
-    if (viewSizeManager.displayMode == kIBDisplay_ListView){
-        if (key == NSLeftArrowFunctionKey || key == NSUpArrowFunctionKey){
-            sectionRow = minIndexSet.sectionIndex;
-            itemIndex = minIndexSet.itemIndex;
-            if (minIndexSet.itemIndex == 0){
-                sectionRow--;
-                if (sectionRow < 0){
-                    sectionRow = 0;
-                    itemIndex = 0;
-                }else
-                    itemIndex = itemCountWithRow(sectionRow) - 1;
-            }else
-                itemIndex--;
-        }else {
-            sectionRow = maxIndexSet.sectionIndex;
-            itemIndex = maxIndexSet.itemIndex;
-            
-            NSInteger itemCount = itemCountWithRow(maxIndexSet.sectionIndex);
-            if (maxIndexSet.itemIndex == itemCount - 1){
-                sectionRow++;
-                NSInteger sectionCount = _dataSource.count;
-                if (sectionRow >= sectionCount){
-                    sectionRow = sectionCount - 1;
-                    itemIndex = itemCount - 1;
-                }else
-                    itemIndex = 0;
-            }else
-                itemIndex++;
-        }
-        
-        [self selectItemWithIndexSet:[IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionRow ItemIndex: itemIndex]];
-        return;
-    }
-    */
+     if (viewSizeManager.displayMode == kIBDisplay_ListView){
+     if (key == NSLeftArrowFunctionKey || key == NSUpArrowFunctionKey){
+     sectionRow = minIndexSet.sectionIndex;
+     itemIndex = minIndexSet.itemIndex;
+     if (minIndexSet.itemIndex == 0){
+     sectionRow--;
+     if (sectionRow < 0){
+     sectionRow = 0;
+     itemIndex = 0;
+     }else
+     itemIndex = itemCountWithRow(sectionRow) - 1;
+     }else
+     itemIndex--;
+     }else {
+     sectionRow = maxIndexSet.sectionIndex;
+     itemIndex = maxIndexSet.itemIndex;
+     
+     NSInteger itemCount = itemCountWithRow(maxIndexSet.sectionIndex);
+     if (maxIndexSet.itemIndex == itemCount - 1){
+     sectionRow++;
+     NSInteger sectionCount = _dataSource.count;
+     if (sectionRow >= sectionCount){
+     sectionRow = sectionCount - 1;
+     itemIndex = itemCount - 1;
+     }else
+     itemIndex = 0;
+     }else
+     itemIndex++;
+     }
+     
+     [self selectItemWithIndexSet:[IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionRow ItemIndex: itemIndex]];
+     return;
+     }
+     */
     
     if (keyCode == kVK_LeftArrow){
         sectionIndex = minIndexSet.sectionIndex;
@@ -949,7 +1154,7 @@
             }
         }
     }
-   
+    
     else if (keyCode == kVK_DownArrow){
         sectionIndex = maxIndexSet.sectionIndex;
         itemIndex = maxIndexSet.itemIndex;
@@ -980,7 +1185,14 @@
     }
     
     IBSectionIndexSet *idx = [IBSectionIndexSet sectionIndexSetWithSectionIndex:sectionIndex ItemIndex:itemIndex];
-    [self selectItemWithIndexSet:idx];
+    if (shiftKeyPressed) {
+        if(![selecteds containsObject:idx]){
+            [selecteds addObject:idx];
+        }
+        [self updateDisplayWithRect: collectionContentView.visibleRect];
+    }else{
+        [self selectItemWithIndexSet:idx];
+    }
     [self scrollToIndexSet:idx];
     
 }
@@ -991,20 +1203,23 @@
     BOOL commandKeyPressed = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
     
     if (keyCode == kVK_Escape){ //ESC
+        [super keyDown:theEvent];
         //[self deselect];//finder does not allow esc deselect, so do we.
     }
     else if (commandKeyPressed && keyCode == kVK_ANSI_A){ //Command + A
         [self selectAll:self];
     }
-    else if (self.allowArrowKeySelection && !commandKeyPressed && (keyCode==kVK_UpArrow || keyCode==kVK_DownArrow || keyCode==kVK_LeftArrow || keyCode==kVK_RightArrow)){
-        [self navigateByArrowKey:keyCode];
+    else if (self.selectionMode != IBCollectionViewSelectionNone && !commandKeyPressed && (keyCode==kVK_UpArrow || keyCode==kVK_DownArrow || keyCode==kVK_LeftArrow || keyCode==kVK_RightArrow)){
+        [self navigateByArrowKey:theEvent];
     }
     
     if (_delegate && [_delegate respondsToSelector: @selector(collectionView:didKeyDownEvent:)])
         [_delegate collectionView: self didKeyDownEvent: theEvent];
 }
 
+
 #pragma mark ==================== Notification
+
 -(void)onSynchronizedViewContentBoundsDidChange:(NSNotification*)n
 {
     if (self.contentView == [n object]){
@@ -1032,7 +1247,6 @@
     
     if (!layoutManager)
         layoutManager = [self defaultLayoutManager];
-    NSUInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
     layoutManager.itemCount = [self itemCountInSectionIndex:sectionIndex];
     return layoutManager;
 }
@@ -1211,18 +1425,30 @@
                     }
                     
                     if ([selecteds containsObject: indexSet]){
-                        if (selectingRegion){
+                        if (stateMode == IBCollectionContentViewStateSelecting){
                             NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
-                            if ([itemView accpetSelectWithRect: tmpRect])
+                            
+                            if(tmpRect.size.width <= 0){
+                                tmpRect.size = NSMakeSize(1, tmpRect.size.height);
+                            }
+                            if(tmpRect.size.height <= 0){
+                                tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
+                            }
+                            
+                            if ([itemView accpetSelectWithRect: tmpRect]){
                                 itemView.selected = YES;
+                            }
                             else{
+                                itemView.selected = NO;
                                 [selecteds removeObject: indexSet];
                                 didSelectionChanged = YES;
                             }
-                        }else
+                        }else{
                             itemView.selected = YES;
-                    }else
+                        }
+                    }else{
                         itemView.selected = NO;
+                    }
                     itemIndex = [itemIndexSet indexGreaterThanIndex: itemIndex];
                 }
             }
@@ -1230,15 +1456,16 @@
         }
     
     }else {
-        IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: 0];
-        NSIndexSet *itemIndexSet = [self itemIndexSetWithRect: rect SectionIndex: 0 LayoutManager: layoutManager];
+        IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:0];
+        NSIndexSet *itemIndexSet = [self itemIndexSetWithRect: rect SectionIndex:0 LayoutManager:layoutManager];
         NSInteger itemIndex = [itemIndexSet firstIndex];
         while (itemIndex != NSNotFound) {
             IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: 0 ItemIndex: itemIndex];
             IBCollectionItemView *itemView = [visibleItemViews objectForKey: indexSet];
             if (!itemView){
-                if (_delegate && [_delegate respondsToSelector: @selector(collectionView:itemViewWithIndexSet:)])
+                if (_delegate && [_delegate respondsToSelector: @selector(collectionView:itemViewWithIndexSet:)]){
                     itemView = [_delegate collectionView: self itemViewWithIndexSet: indexSet];
+                }
             }
             NSAssert(itemView, @"item view cant't no be nil");
             
@@ -1250,18 +1477,28 @@
             if (!itemView.superview)
                 [collectionContentView addSubview: itemView];
             if ([selecteds containsObject: indexSet]){
-                if (selectingRegion){
+                if (stateMode == IBCollectionContentViewStateSelecting){
                     NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
-                    if ([itemView accpetSelectWithRect: tmpRect])
+                    if(tmpRect.size.width <= 0){
+                        tmpRect.size = NSMakeSize(1, tmpRect.size.height);
+                    }
+                    if(tmpRect.size.height <= 0){
+                        tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
+                    }
+                    if ([itemView accpetSelectWithRect: tmpRect]){
                         itemView.selected = YES;
+                    }
                     else{
+                        itemView.selected = NO;
                         [selecteds removeObject: indexSet];
                         didSelectionChanged = YES;
                     }
-                }else
+                }else{
                     itemView.selected = YES;
-            }else
+                }
+            }else{
                 itemView.selected = NO;
+            }
             itemIndex = [itemIndexSet indexGreaterThanIndex: itemIndex];
         }
     }

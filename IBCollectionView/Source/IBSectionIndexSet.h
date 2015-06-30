@@ -4,7 +4,7 @@
 //
 //  Created by Kevin Lu on 7/2/13.
 //  Copyright (c) 2013 Icyblaze. All rights reserved.
-//
+//  https://github.com/icyblazek/IBCollectionView
 
 #import <Foundation/Foundation.h>
 

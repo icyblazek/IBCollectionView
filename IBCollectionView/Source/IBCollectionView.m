@@ -263,7 +263,7 @@ typedef enum {
         }
     }
     
-    isSectionViewMode = [self sectionCount]>1;
+    isSectionViewMode = [self sectionCount]>0;
     
     NSSize contentSize = [self documentContentSize];
     if (contentSize.height > self.bounds.size.height){
@@ -890,28 +890,31 @@ typedef enum {
             if (!_selectionRegionView){
                 _selectionRegionView = [[IBCollectionSelectionRegionView alloc] initWithFrame: self.bounds];
                 [self addSubview: _selectionRegionView];
+                NSLog(@"trackMouseDraggedEvent IBCollectionSelectionRegionView");
             }
             
-            selectingRegionRect.size.width = localPoint.x - firstMouseDownPoint.x;
-            selectingRegionRect.size.height = localPoint.y - firstMouseDownPoint.y;
-            if (selectingRegionRect.size.width > 0 && selectingRegionRect.size.height < 0){
-                selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
-                selectingRegionRect.origin.y = localPoint.y;
-            }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height < 0){
-                selectingRegionRect.origin = localPoint;
-                selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
-                selectingRegionRect.size.height = fabs(selectingRegionRect.size.height);
-            }else if (selectingRegionRect.size.width < 0 && selectingRegionRect.size.height > 0){
+            selectingRegionRect.size.width = fabs(localPoint.x - firstMouseDownPoint.x);
+            selectingRegionRect.size.height = fabs(localPoint.y - firstMouseDownPoint.y);
+            
+            if (localPoint.x<firstMouseDownPoint.x) {
                 selectingRegionRect.origin.x = localPoint.x;
+            }
+            else{
+                selectingRegionRect.origin.x = firstMouseDownPoint.x;
+            }
+            
+            if (localPoint.y<firstMouseDownPoint.y) {
+                selectingRegionRect.origin.y = localPoint.y;
+            }
+            else {
                 selectingRegionRect.origin.y = firstMouseDownPoint.y;
-                selectingRegionRect.size.width = fabs(selectingRegionRect.size.width);
             }
             
             NSArray *itemIndexs = [self itemIndexsWithRect: selectingRegionRect];
             [selecteds removeAllObjects];
             [selecteds addObjectsFromArray: itemIndexs];
             
-            [self updateDisplayWithRect: self.documentVisibleRect];
+            //[self updateDisplayWithRect: self.documentVisibleRect];
             
             if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
                 [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
@@ -1355,6 +1358,7 @@ typedef enum {
     BOOL didSelectionChanged = NO;
     NSIndexSet *sectionSet = [self sectionIndexSetWithRect: rect];
     if (isSectionViewMode){
+     
         NSInteger sectionIndex = [sectionSet firstIndex];
         while (sectionIndex != NSNotFound) {
             
@@ -1381,6 +1385,7 @@ typedef enum {
             NSIndexSet *itemIndexSet = [self itemIndexSetWithRect: rect SectionIndex: sectionIndex LayoutManager: layoutManager];
             NSInteger itemIndex = [itemIndexSet firstIndex];
             if (!isExpand){
+                
                 while (itemIndex != NSNotFound) {
                     IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: itemIndex];
                     IBCollectionItemView *itemView = [visibleItemViews objectForKey: indexSet];
@@ -1456,6 +1461,8 @@ typedef enum {
         }
     
     }else {
+        
+        
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:0];
         NSIndexSet *itemIndexSet = [self itemIndexSetWithRect: rect SectionIndex:0 LayoutManager:layoutManager];
         NSInteger itemIndex = [itemIndexSet firstIndex];
@@ -1474,8 +1481,9 @@ typedef enum {
             if (_delegate && [_delegate respondsToSelector: @selector(collectionView:WillDisplayItemView:indexSet:)])
                 [_delegate collectionView: self WillDisplayItemView: itemView indexSet: indexSet];
             [visibleItemViews setObject: itemView forKey: indexSet];
-            if (!itemView.superview)
+            if (!itemView.superview){
                 [collectionContentView addSubview: itemView];
+            }
             if ([selecteds containsObject: indexSet]){
                 if (stateMode == IBCollectionContentViewStateSelecting){
                     NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];

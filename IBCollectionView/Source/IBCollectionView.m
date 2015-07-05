@@ -890,7 +890,6 @@ typedef enum {
             if (!_selectionRegionView){
                 _selectionRegionView = [[IBCollectionSelectionRegionView alloc] initWithFrame: self.bounds];
                 [self addSubview: _selectionRegionView];
-                NSLog(@"trackMouseDraggedEvent IBCollectionSelectionRegionView");
             }
             
             selectingRegionRect.size.width = fabs(localPoint.x - firstMouseDownPoint.x);
@@ -914,7 +913,7 @@ typedef enum {
             [selecteds removeAllObjects];
             [selecteds addObjectsFromArray: itemIndexs];
             
-            //[self updateDisplayWithRect: self.documentVisibleRect];
+            [self updateDisplayWithRect: self.documentVisibleRect];
             
             if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
                 [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];

@@ -15,50 +15,22 @@
 
 @implementation IBSectionViewLayoutManager
 
--(CGFloat)itemViewMarginMinX
+- (id)init
 {
-    return 10;
+    if (self=[super init]) {
+        _itemViewHSpacing = 10;
+        _itemViewWSpacing = 10;
+        _itemViewMarginMinX = 10;
+        _itemViewMarginMinY = 10;
+        _itemViewMarginMaxX = 10;
+        _itemViewMarginMaxY = 10;
+        _sectionHeaderViewHeight = 20;
+        _sectionBottomViewHeight = 20;
+        _itemSize = NSMakeSize(100, 100);
+    }
+    return self;
 }
 
--(CGFloat)itemViewMarginMinY
-{
-    return 10;
-}
-
--(CGFloat)itemViewMarginMaxX
-{
-    return 10;
-}
-
--(CGFloat)itemViewMarginMaxY
-{
-    return 10;
-}
-
--(CGFloat)itemViewWSpacing
-{
-    return 10;
-}
-
--(CGFloat)itemViewHSpacing
-{
-    return 10;
-}
-
--(NSSize)itemSize
-{
-    return NSMakeSize(100, 100);
-}
-
--(CGFloat)sectionHeaderViewHeight
-{
-    return 20;
-}
-
--(CGFloat)sectionBottomViewHeight
-{
-    return 20;
-}
 
 -(NSUInteger)countOfColumn
 {
@@ -96,20 +68,26 @@
     CGFloat itemMarginMaxY = [self itemViewMarginMaxY];
     
     CGFloat usedWidth = _layoutWidth - (itemMarginMinX + itemMarginMaxX);
-    NSInteger itemCol = usedWidth / (itemSize.width + itemWSpacing);
+    NSInteger maxNumberOfCol = usedWidth / (itemSize.width + itemWSpacing);
     
-    if (itemCol == 0)
-        itemCol = 1;
+    if (maxNumberOfCol <= 0)
+        maxNumberOfCol = 1;
     
     CGFloat actualWSpace = itemWSpacing;
-    BOOL autoWSpacing = YES;
-    if (autoWSpacing && self.itemCount > itemCol){
-        CGFloat tmp = usedWidth - itemCol * itemSize.width;
-        actualWSpace = tmp / (itemCol + 1);
+    BOOL autoWSpacing = NO;
+    if (autoWSpacing){
+        if (self.itemCount > maxNumberOfCol) {
+            CGFloat tmp = usedWidth - maxNumberOfCol * itemSize.width;
+            actualWSpace = tmp / (maxNumberOfCol + 1);
+        }
+        else{
+            CGFloat tmp = usedWidth - maxNumberOfCol * itemSize.width;
+            actualWSpace = tmp / (maxNumberOfCol + 1);
+        }
     }
     
-    NSInteger drawIndexX = index % itemCol;
-    NSInteger drawIndexY = index / itemCol;
+    NSInteger drawIndexX = index % maxNumberOfCol;
+    NSInteger drawIndexY = index / maxNumberOfCol;
     CGFloat x = floor(drawIndexX * itemSize.width + (drawIndexX + 1) * actualWSpace + itemMarginMinX);
     CGFloat y = floor(drawIndexY * itemSize.height + drawIndexY * itemHSpacing + itemMarginMaxY + headerHeight);
     NSRect result = NSMakeRect(x, y, itemSize.width, itemSize.height);

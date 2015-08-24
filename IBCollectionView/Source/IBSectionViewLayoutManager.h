@@ -13,17 +13,18 @@
 @interface IBSectionViewLayoutManager : NSObject{
     CGFloat _layoutWidth;
 }
+@property(assign) NSSize itemSize;
+@property(assign) CGFloat itemViewWSpacing;
+@property(assign) CGFloat itemViewHSpacing;
 
+@property(assign) CGFloat itemViewMarginMinX;
+@property(assign) CGFloat itemViewMarginMaxX;
 
--(CGFloat)itemViewMarginMinX;
--(CGFloat)itemViewMarginMinY;
--(CGFloat)itemViewMarginMaxX;
--(CGFloat)itemViewMarginMaxY;
--(CGFloat)itemViewWSpacing;
--(CGFloat)itemViewHSpacing;
--(NSSize)itemSize;
--(CGFloat)sectionHeaderViewHeight;
--(CGFloat)sectionBottomViewHeight;
+@property(assign) CGFloat itemViewMarginMinY;
+@property(assign) CGFloat itemViewMarginMaxY;
+
+@property(assign) CGFloat sectionHeaderViewHeight;
+@property(assign) CGFloat sectionBottomViewHeight;
 
 -(NSRect)itemRectOfIndex:(NSInteger)index;
 -(NSInteger)itemIndexWithPoint:(NSPoint)point;

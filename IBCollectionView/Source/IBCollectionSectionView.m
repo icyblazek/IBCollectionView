@@ -29,14 +29,9 @@
     return self;
 }
 
-- (void)drawRect:(NSRect)dirtyRect
+- (BOOL)isOpaque
 {
-//    [[NSColor redColor] setFill];
-//    NSRectFill(self.bounds);
-//    
-//    NSBezierPath *tmpPath = [NSBezierPath bezierPathWithRect: self.bounds];
-//    [[NSColor blackColor] setStroke];
-//    [tmpPath stroke];
+    return NO;
 }
 
 -(NSArray*)subviews
@@ -86,12 +81,6 @@
         }
         [self.headerView setFrameOrigin: tmpRect.origin];
     }
-}
-
--(void)removeFromSuperview
-{
-    [[self subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
-    [super removeFromSuperview];
 }
 
 @end

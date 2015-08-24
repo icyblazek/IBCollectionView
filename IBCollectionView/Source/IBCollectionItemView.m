@@ -87,4 +87,9 @@
     return NO;
 }
 
+- (BOOL)isFlipped
+{
+    return YES;
+}
+
 @end

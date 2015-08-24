@@ -39,6 +39,8 @@ typedef enum {
 //- (void)collectionViewKeyDown:(IBCollectionView*)collectionView Event:(NSEvent*)theEvent;
 - (NSMenu*)collectionViewMenu:(IBCollectionView*)collectionView IndextSet:(IBSectionIndexSet*)indexSet;
 - (NSMenu*)collectionViewMenu:(IBCollectionView*)collectionView;
+- (void)collectionViewDidEndScroll:(IBCollectionView*)collectionView;
+- (void)collectionViewBeginScrolling:(IBCollectionView*)collectionView;
 
 //
 //// Drag & Drop
@@ -95,7 +97,8 @@ typedef enum {
 - (void)selectAll:(id)sender;
 - (void)selectItemWithIndexSet:(IBSectionIndexSet*)indexSet;
 - (void)selectItemWithIndexSets:(NSArray*)indexSets; //NSArray of IBSectionIndexSet
-- (void)deselect;
+
+- (void)deselectAll:(id)sender;
 - (void)deselectItemWithIndexSet:(IBSectionIndexSet*)indexSet;
 - (void)deselectItemWithIndexSets:(NSArray*)indexSets; //NSArray of IBSectionIndexSet
 - (NSArray*)selectedItemIndexSets;

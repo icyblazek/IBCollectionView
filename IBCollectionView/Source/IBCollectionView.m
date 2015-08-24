@@ -37,12 +37,6 @@ typedef enum {
     return YES;
 }
 
--(void)drawRect:(NSRect)dirtyRect
-{
-    [[NSColor whiteColor] setFill];
-    NSRectFill(self.bounds);
-}
-
 -(BOOL)isFlipped
 {
     return YES;
@@ -121,6 +115,8 @@ typedef enum {
     
     NSInteger _sectionCount;
     NSMutableDictionary *itemCountInSection;
+    
+    NSWindow *dragginWindow;
 }
 
 @end
@@ -131,12 +127,17 @@ typedef enum {
 -(id)initWithFrame:(NSRect)frameRect
 {
     if (self = [super initWithFrame: frameRect]){
+
         [self setDrawsBackground: NO];
-        [self setBackgroundColor: [NSColor whiteColor]];
+        //[self setBackgroundColor: [NSColor colorWithDeviceWhite:0.988 alpha:1]];
+
         [self setAutohidesScrollers: YES];
         [self setHasVerticalScroller: YES];
-        [self setBorderType: NSBezelBorder];
+        [self setBorderType: NSNoBorder];
+        //[self setWantsLayer:YES];
         
+        self.focusRingType = NSFocusRingTypeNone;
+
         stateMode = IBCollectionContentViewStateNone;
         
         collectionContentView = [[IBCollectionContentView alloc] initWithFrame: self.bounds];
@@ -157,12 +158,17 @@ typedef enum {
                                                  selector: @selector(onSynchronizedViewContentBoundsDidChange:)
                                                      name: NSViewBoundsDidChangeNotification
                                                    object: nil];
-        
+
+//        [[NSNotificationCenter defaultCenter] addObserver: self
+//                                                 selector: @selector(didEndLiveScrollNotification:)
+//                                                     name: NSScrollViewDidEndLiveScrollNotification
+//                                                   object: nil];
+
         collectionContentViewTrackingArea = [[NSTrackingArea alloc] initWithRect: NSZeroRect
                                                     options: NSTrackingActiveInActiveApp | NSTrackingInVisibleRect | NSTrackingMouseMoved
                                                       owner: self
                                                    userInfo: nil];
-        
+
         [collectionContentView addTrackingArea: collectionContentViewTrackingArea];
     }
     return self;
@@ -232,6 +238,7 @@ typedef enum {
     return itemCount;
 }
 
+
 -(void)reloadData
 {
     _sectionCount = -1;
@@ -297,23 +304,15 @@ typedef enum {
     }else
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     
-    [self updateDisplayWithRect: self.documentVisibleRect];
+    [self updateDisplayWithRect: self.documentVisibleRect];//[collectionContentView addSubview: sectionView];
 }
 
 -(void)setFrame:(NSRect)frameRect
 {
-    [super setFrame: frameRect];
-    [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
-    [sectionViewCacheFrames removeAllObjects];
-    
-    NSSize contentSize = [self documentContentSize];
-    if (contentSize.height > self.bounds.size.height){
-        CGFloat tmpY = self.bounds.size.height - contentSize.height;
-        [collectionContentView setFrame: NSMakeRect(0, tmpY, contentSize.width, contentSize.height)];
-    }else
-        [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
-    
-    [self updateDisplayWithRect: self.documentVisibleRect];
+    NSPoint offsetPoint = [self scrollOffsetPoint];
+    [super setFrame:frameRect];
+    [self updateLayout];
+    [self scrollToOffsetPoint:offsetPoint];
 }
 
 - (NSPoint)scrollOffsetPoint;
@@ -359,6 +358,8 @@ typedef enum {
     return selecteds;
 }
 
+#pragma mark - firstResponder actions
+
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
     if (_delegate && [_delegate respondsToSelector: @selector(validateMenuItem:)]){
@@ -384,7 +385,6 @@ typedef enum {
     if (_delegate && [_delegate respondsToSelector: @selector(exportAction:)])
         [_delegate performSelector:@selector(exportAction:) withObject:self];
 }
-
 
 - (void)selectAll:(id)sender
 {
@@ -470,6 +470,10 @@ typedef enum {
         [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
 }
 
+- (void)deselectAll:(id)sender
+{
+    [self deselect];
+}
 
 -(void)deselect
 {
@@ -515,7 +519,7 @@ typedef enum {
                 NSUInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
                 for (NSInteger i = 0; i < itemCount; i++){
                     IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: i];
-                    NSRect itemRect = [layoutManager itemRectOfIndex: i];
+                    NSRect itemRect = [layoutManager itemRectOfIndex:i];
                     itemRect = [self convertItemRect: itemRect fromSectionFrame: sectionRect];
                     if (NSPointInRect(point, itemRect)){
                         IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
@@ -536,7 +540,7 @@ typedef enum {
         NSUInteger num = [itemCountInSection[@(0)] integerValue];
         for (NSInteger i = 0; i < num; i++){
             IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: 0 ItemIndex: i];
-            NSRect itemRect = [layoutManager itemRectOfIndex: i];
+            NSRect itemRect = [layoutManager itemRectOfIndex:i];
             if (NSPointInRect(point, itemRect)){
                 IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
                 NSPoint p = [itemView convertPoint:point fromView:itemView.superview];
@@ -746,10 +750,12 @@ typedef enum {
     
     BOOL commandKeyDown = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
     BOOL shiftKeyDown = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
-    //BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
-    //BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
+    BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
+    BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
     BOOL bNeedUpdateDisplay = NO;
     BOOL clickedOnSelection = NO;
+    BOOL isPressedMultipleSelectionCombination = (commandKeyDown && !shiftKeyDown && !controlKeyDown && !optionKeyDown) ||
+                                    (shiftKeyDown && !commandKeyDown && !controlKeyDown && !optionKeyDown);
     
     IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
     IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
@@ -764,15 +770,9 @@ typedef enum {
     
     if (!clickedOnSelection) {
         stateMode = IBCollectionContentViewStateSelecting;
-        if (!shiftKeyDown || commandKeyDown) {
+        if (_selectionMode == IBCollectionViewSelectionSingle || !isPressedMultipleSelectionCombination) {
             //if user did not press shift key or user press cmd key, clean up current selections.
             //This is Finder's behivour.
-            if (selecteds.count > 0){
-                bNeedUpdateDisplay = YES;
-                [selecteds removeAllObjects];
-            }
-        }
-        else if(_selectionMode == IBCollectionViewSelectionSingle){
             if (selecteds.count > 0){
                 bNeedUpdateDisplay = YES;
                 [selecteds removeAllObjects];
@@ -795,6 +795,11 @@ typedef enum {
         }
     }
     else{
+        if (selecteds.count>0 && isPressedMultipleSelectionCombination) {
+            [selecteds removeObject:indexSet];
+            bNeedUpdateDisplay = YES;
+        }
+        
         if ([_delegate respondsToSelector:@selector(collectionViewDragPromisedFilesOfTypes:)]) {
             stateMode = IBCollectionContentViewStateDragging;
         }
@@ -846,6 +851,9 @@ typedef enum {
         return;
     }
     
+    if (stateMode == IBCollectionContentViewStateDragging) {
+        
+    }
     
     BOOL keepOn = YES;
     while (keepOn) {
@@ -894,7 +902,9 @@ typedef enum {
             
             selectingRegionRect.size.width = fabs(localPoint.x - firstMouseDownPoint.x);
             selectingRegionRect.size.height = fabs(localPoint.y - firstMouseDownPoint.y);
-            
+            if (selectingRegionRect.size.height<=0) {
+                selectingRegionRect.size.height=1;
+            }
             if (localPoint.x<firstMouseDownPoint.x) {
                 selectingRegionRect.origin.x = localPoint.x;
             }
@@ -919,8 +929,8 @@ typedef enum {
                 [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
             
             if (_selectionRegionView){
-                NSRect drawRect = [_selectionRegionView convertRect: selectingRegionRect fromView: collectionContentView];
-                [_selectionRegionView drawFrameWithRect: drawRect];
+                NSRect drawSelectionRect = [_selectionRegionView convertRect: selectingRegionRect fromView: collectionContentView];
+                [_selectionRegionView drawFrameWithRect: drawSelectionRect];
             }
             
             [collectionContentView autoscroll: event];
@@ -946,7 +956,7 @@ typedef enum {
                 imageLocation.origin = [self convertPoint:[event locationInWindow] fromView: nil];
                 imageLocation.size = NSMakeSize(32, 32);
                 
-                [self dragPromisedFilesOfTypes:list fromRect:imageLocation source:self slideBack:YES event:event];
+                [self dragPromisedFilesOfTypes:list fromRect:imageLocation source:self slideBack:NO event:event];
                 return NO;
             }
         }
@@ -976,6 +986,10 @@ typedef enum {
     stateMode = IBCollectionContentViewStateNone;
     draggingItemView = nil;
     draggingSession = nil;
+    if (dragginWindow) {
+        [dragginWindow close];
+        dragginWindow = nil;
+    }
 }
 
 - (NSArray *)namesOfPromisedFilesDroppedAtDestination:(NSURL *)dropDestination
@@ -984,6 +998,76 @@ typedef enum {
         return [_delegate collectionView:self namesOfPromisedFilesDroppedAtDestination:dropDestination];
     }
     return nil;
+}
+
+- (void)draggingSession: (NSDraggingSession *)session
+           movedToPoint: (NSPoint)screenPoint
+{
+    if (dragginWindow) {
+        [dragginWindow setFrameOrigin:NSMakePoint(screenPoint.x + 15, screenPoint.y-20)];
+    }
+}
+
+//- (BOOL)dragPromisedFilesOfTypes:(NSArray *)typeArray
+//                        fromRect:(NSRect)aRect
+//                          source:(id)sourceObject
+//                       slideBack:(BOOL)slideBack
+//                           event:(NSEvent *)theEvent
+//{
+//    NSLog(@"dragPromisedFilesOfTypes %@", typeArray);
+//    NSImage *img = [NSImage imageNamed:@"t1White"];
+//    NSPasteboard *pb = [NSPasteboard generalPasteboard];
+//    [self dragImage:img at:aRect.origin offset:NSZeroSize event:theEvent pasteboard:nil source:sourceObject slideBack:slideBack];
+//    return [super dragPromisedFilesOfTypes:typeArray fromRect:aRect source:sourceObject slideBack:slideBack event:theEvent];
+//}
+
+- (void)dragImage:(NSImage *)anImage
+               at:(NSPoint)imageLoc
+           offset:(NSSize)mouseOffset
+            event:(NSEvent *)theEvent
+       pasteboard:(NSPasteboard *)pboard
+           source:(id)sourceObject
+        slideBack:(BOOL)slideBack
+{
+    
+    if (dragginWindow) {
+        [dragginWindow close];
+        dragginWindow = nil;
+    }
+    
+    NSImageView *imageView = [[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 30, 30)];
+    NSMutableDictionary *d = [[NSMutableDictionary alloc] init];
+    [d setObject:[NSColor whiteColor] forKey:NSForegroundColorAttributeName];
+    [d setObject:[NSFont boldSystemFontOfSize:12] forKey:NSFontAttributeName];
+    NSMutableParagraphStyle *p = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+    [p setAlignment:NSCenterTextAlignment];
+    [d setObject:p forKey:NSParagraphStyleAttributeName];
+    NSAttributedString *str = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", [self.selectedItemIndexSets count]] attributes:d];
+    NSSize size = [str size];
+    int w = MAX(size.width, size.height)+4;
+    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(w, w)];
+    [image lockFocus];
+    NSBezierPath *b = [NSBezierPath bezierPathWithOvalInRect:NSMakeRect(0, 0, w, w)];
+    [[NSColor colorWithDeviceRed:242/255.0 green:33/255.0 blue:36/255.0 alpha:1] set];
+    [b fill];
+    [str drawInRect:NSMakeRect(2, 3, w-4, w-4)];
+    [image unlockFocus];
+    [imageView setImage:image];
+    [imageView setImageFrameStyle:NSImageFrameNone];
+    [imageView setImageScaling:NSImageScaleNone];
+    [imageView setFrameSize:NSMakeSize(image.size.width, image.size.height)];
+
+    
+    dragginWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, image.size.width, image.size.height) styleMask:NSBorderlessWindowMask backing:NSBackingStoreRetained defer:YES];
+    [dragginWindow setReleasedWhenClosed:NO];
+    [dragginWindow setOpaque:NO];
+    [dragginWindow setLevel:NSScreenSaverWindowLevel];
+    [dragginWindow setBackgroundColor:[NSColor clearColor]];
+    [[dragginWindow contentView] addSubview:imageView];
+    [dragginWindow setFrameOrigin:NSMakePoint(imageLoc.x+15, imageLoc.y-20)];
+    [dragginWindow orderFront:nil];
+    
+    [super dragImage:anImage at:imageLoc offset:mouseOffset event:theEvent pasteboard:pboard source:sourceObject slideBack:slideBack];
 }
 
 #pragma mark ==================== Dragging Destination
@@ -1002,7 +1086,6 @@ typedef enum {
 
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender
 {
-    
     if (_delegate && [_delegate respondsToSelector: @selector(collectionView:draggingUpdated:withIndexSet:)]){
       
         IBSectionIndexSet *idx = [self itemIndexSetWithPoint:[collectionContentView convertPoint:[sender draggingLocation] fromView: nil]];
@@ -1222,11 +1305,81 @@ typedef enum {
 
 #pragma mark ==================== Notification
 
+- (void)didEndScrollNotification:(NSNotification*)n
+{
+    NSLog(@"didEndScrollNotification");
+    if (_delegate && [_delegate respondsToSelector: @selector(collectionViewDidEndScroll:)])
+        [_delegate collectionViewDidEndScroll:self];
+}
+
 -(void)onSynchronizedViewContentBoundsDidChange:(NSNotification*)n
 {
     if (self.contentView == [n object]){
+//#if USE_BATCH_THUMNAIL_QUERY
+//        if (_delegate && [_delegate respondsToSelector: @selector(collectionViewBeginScrolling:)])
+//            [_delegate collectionViewBeginScrolling:self];
+//#endif
+
         [self updateDisplayWithRect: self.documentVisibleRect];
-        [self removeUnvisibleViews: self.documentVisibleRect];
+        //[self removeUnvisibleViews: self.documentVisibleRect];
+        //-(void)removeUnvisibleViews:(NSRect)visibleRect
+        {
+            NSRect visibleRect = self.documentVisibleRect;
+            NSMutableArray *needRemoveViewKeys = [NSMutableArray array];
+            [visibleSectionViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+                IBCollectionSectionView *sectionView = obj;
+                if (!NSIntersectsRect(sectionView.frame, visibleRect))
+                    [needRemoveViewKeys addObject: key];
+            }];
+            for (id key in needRemoveViewKeys){
+                NSView *tmpView = [visibleSectionViews objectForKey: key];
+                [self removeSubViewToReusable: tmpView];
+                [visibleSectionViews removeObjectForKey: key];
+            }
+            [needRemoveViewKeys removeAllObjects];
+
+            [visibleItemViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+                NSView *tmpView = obj;
+                NSRect tmpRect = tmpView.frame;
+                if (isSectionViewMode){
+                    NSRect superViewRect = tmpView.superview.frame;
+                    tmpRect.origin.y = superViewRect.origin.y + tmpRect.origin.y;
+                }
+                if (!NSIntersectsRect(tmpRect, visibleRect))
+                    [needRemoveViewKeys addObject: key];
+            }];
+
+            for (NSString *key in needRemoveViewKeys){
+                NSView *tmpView = [visibleItemViews objectForKey: key];
+                [self removeSubViewToReusable: (IBCollectionItemView*)tmpView];
+                [visibleItemViews removeObjectForKey: key];
+            }
+        }
+
+//#if USE_BATCH_THUMNAIL_QUERY
+//        static dispatch_source_t readtimer=NULL;
+//        if(readtimer) {
+//            dispatch_source_cancel(readtimer);
+//            //dispatch_release(readtimer);
+//            readtimer=NULL;
+//        }
+//        dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+//        readtimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+//        dispatch_source_set_timer(readtimer, dispatch_time(DISPATCH_TIME_NOW, 0.85 * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, 0);
+//        dispatch_source_set_event_handler(readtimer, ^{
+//            if (readtimer) dispatch_source_cancel(readtimer);
+//
+//            //DDLogVerbose(@"th=%d", [NSThread mainThread]==[NSThread currentThread]);
+//            dispatch_async( dispatch_get_main_queue(), ^{
+//                [self didEndScrollNotification:nil];
+//            });
+//
+//            //if (readtimer) dispatch_release(readtimer);
+//            readtimer=NULL;
+//        });
+//        dispatch_resume(readtimer);
+//#endif
+
     }
 }
 
@@ -1319,38 +1472,7 @@ typedef enum {
 }
 
 
--(void)removeUnvisibleViews:(NSRect)visibleRect
-{
-    NSMutableArray *needRemoveViewKeys = [NSMutableArray array];
-    [visibleSectionViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        IBCollectionSectionView *sectionView = obj;
-        if (!NSIntersectsRect(sectionView.frame, visibleRect))
-            [needRemoveViewKeys addObject: key];
-    }];
-    for (id key in needRemoveViewKeys){
-        NSView *tmpView = [visibleSectionViews objectForKey: key];
-        [self removeSubViewToReusable: tmpView];
-        [visibleSectionViews removeObjectForKey: key];
-    }
-    [needRemoveViewKeys removeAllObjects];
-    
-    [visibleItemViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        NSView *tmpView = obj;
-        NSRect tmpRect = tmpView.frame;
-        if (isSectionViewMode){
-            NSRect superViewRect = tmpView.superview.frame;
-            tmpRect.origin.y = superViewRect.origin.y + tmpRect.origin.y;
-        }
-        if (!NSIntersectsRect(tmpRect, visibleRect))
-            [needRemoveViewKeys addObject: key];
-    }];
-    
-    for (NSString *key in needRemoveViewKeys){
-        NSView *tmpView = [visibleItemViews objectForKey: key];
-        [self removeSubViewToReusable: (IBCollectionItemView*)tmpView];
-        [visibleItemViews removeObjectForKey: key];
-    }
-}
+
 
 -(void)updateDisplayWithRect:(NSRect)rect
 {
@@ -1404,6 +1526,7 @@ typedef enum {
                     [sectionView.bottomView setFrameSize: NSMakeSize(self.bounds.size.width, [layoutManager sectionBottomViewHeight])];
                 if (!self.fixedSectionHeaderView)
                     [sectionView trackHeaderViewWithVisibleRect: collectionContentView.visibleRect];
+
                 while (itemIndex != NSNotFound) {
                     IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: itemIndex];
                     IBCollectionItemView *itemView = [visibleItemViews objectForKey: indexSet];
@@ -1535,7 +1658,7 @@ typedef enum {
 -(NSIndexSet*)itemIndexSetWithRect:(NSRect)rect SectionIndex:(NSInteger)sectionIndex LayoutManager:(IBSectionViewLayoutManager*)layoutManager
 {
     NSMutableIndexSet *indexSet = [NSMutableIndexSet indexSet];
-    
+
     if (isSectionViewMode){
         NSRect sectionViewFrame = [[sectionViewCacheFrames objectForKey:@(sectionIndex)] rectValue];
         NSUInteger itemCount = [self itemCountInSectionIndex:sectionIndex];
@@ -1605,6 +1728,18 @@ typedef enum {
 {
     if (_delegate && [_delegate respondsToSelector: @selector(collectionView:didDoubleClickItemView:)])
         [_delegate collectionView: self didDoubleClickItemView: indexSet];
+}
+
+#pragma mark - NSPasteboardItemDataProvider
+
+- (void)pasteboard:(NSPasteboard *)pasteboard item:(NSPasteboardItem *)item provideDataForType:(NSString *)type
+{
+    //NSLog(@"provideDataForType=%@", type);
+}
+
+- (void)pasteboardFinishedWithDataProvider:(NSPasteboard *)pasteboard
+{
+    //NSLog(@"pasteboardFinishedWithDataProvider");
 }
 
 @end

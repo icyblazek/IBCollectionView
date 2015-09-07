@@ -9,11 +9,11 @@
 #import "IBCollectionView.h"
 #import <Carbon/Carbon.h>
 
-typedef enum {
+typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     IBCollectionContentViewStateNone            = 0,
     IBCollectionContentViewStateSelecting       = 1,
     IBCollectionContentViewStateDragging        = 2,
-} IBCollectionContentViewState;
+};
 
 @interface IBCollectionContentView : NSView{
     
@@ -142,7 +142,7 @@ typedef enum {
         
         collectionContentView = [[IBCollectionContentView alloc] initWithFrame: self.bounds];
         [self setDocumentView: collectionContentView];
-        
+
         selecteds = [[NSMutableArray alloc] init];
         reusableViews = [[NSMutableDictionary alloc] init];
         classMap = [[NSMutableDictionary alloc] init];
@@ -245,7 +245,7 @@ typedef enum {
     itemCountInSection = [[NSMutableDictionary alloc] init];
     
     [[collectionContentView subviews] makeObjectsPerformSelector: @selector(removeFromSuperview)];
-    [selecteds removeAllObjects];
+    [self _removeAllSelectedIndexes];
     [visibleSectionViews removeAllObjects];
     [visibleItemViews removeAllObjects];
     [reusableViews removeAllObjects];
@@ -280,8 +280,6 @@ typedef enum {
         [collectionContentView setFrame: NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     [self scrollToTop];
     [self updateDisplayWithRect: self.documentVisibleRect];
-    
-   
     
     if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
         [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
@@ -386,6 +384,40 @@ typedef enum {
         [_delegate performSelector:@selector(exportAction:) withObject:self];
 }
 
+
+- (void)_removeAllSelectedIndexes
+{
+    [selecteds removeAllObjects];
+}
+
+- (void)_addSelectedIndex:(IBSectionIndexSet*)idx
+{
+    if (![selecteds containsObject:idx]) {
+        [selecteds addObject:idx];
+    }
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    for (IBSectionIndexSet *idx in selecteds) {
+        NSAssert(d[@(idx.hash)] == nil, @"duplicate index !?");
+        [d setObject:idx forKey:@(idx.hash)];
+    }
+}
+
+- (void)_addSelectedIndexes:(NSArray*)idxes
+{
+    for (IBSectionIndexSet *idx in idxes) {
+        if (![selecteds containsObject:idx]) {
+            [selecteds addObject:idx];
+        }
+    }
+
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    for (IBSectionIndexSet *idx in selecteds) {
+        NSAssert(d[@(idx.hash)] == nil, @"duplicate index !?");
+        [d setObject:idx forKey:@(idx.hash)];
+    }
+}
+
+
 - (void)selectAll:(id)sender
 {
     NSMutableArray *indexes = [NSMutableArray array];
@@ -402,9 +434,9 @@ typedef enum {
             [indexes addObject: [IBSectionIndexSet sectionIndexSetWithSectionIndex: 0 ItemIndex: itemIndex]];
     }
     
-    [selecteds removeAllObjects];
-    [selecteds addObjectsFromArray: indexes];
-    
+    [self _removeAllSelectedIndexes];
+    [self _addSelectedIndexes:indexes];
+
     [self updateDisplayWithRect: collectionContentView.visibleRect];
 
     if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
@@ -428,8 +460,8 @@ typedef enum {
             [indexes addObject:indexSet];
         }
     }
-    [selecteds removeAllObjects];
-    [selecteds addObjectsFromArray:indexes];
+    [self _removeAllSelectedIndexes];
+    [self _addSelectedIndexes:indexes];
 
     [self updateDisplayWithRect: collectionContentView.visibleRect];
     
@@ -461,8 +493,8 @@ typedef enum {
         }
     }
     
-    [selecteds removeAllObjects];
-    [selecteds addObjectsFromArray: indexes];
+    [self _removeAllSelectedIndexes];
+    [self _addSelectedIndexes: indexes];
     
     [self updateDisplayWithRect: collectionContentView.visibleRect];
     
@@ -477,7 +509,7 @@ typedef enum {
 
 -(void)deselect
 {
-    [selecteds removeAllObjects];
+    [self _removeAllSelectedIndexes];
     [self updateDisplayWithRect: collectionContentView.visibleRect];
     if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
         [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
@@ -681,7 +713,7 @@ typedef enum {
         //if the current click item already in selection. do not clean up selection.
         if (selecteds.count > 0){
             bNeedUpdateDisplay = YES;
-            [selecteds removeAllObjects];
+            [self _removeAllSelectedIndexes];
         }
     }
     
@@ -690,7 +722,7 @@ typedef enum {
         localPoint = [itemView convertPoint: localPoint fromView: collectionContentView];
         if ([itemView accpetSelectWithPoint: localPoint]){
             if (![selecteds containsObject:indexSet]) {
-                [selecteds addObject: indexSet];
+                [self _addSelectedIndex: indexSet];
                 bNeedUpdateDisplay = YES;
             }
         }
@@ -738,6 +770,47 @@ typedef enum {
     
 }
 
+//- (void)scrollWheel:(NSEvent *)theEvent
+//{
+//    BOOL shouldForwardScroll = NO;
+//
+//    if (fabs(theEvent.deltaX) > fabs(theEvent.deltaY))
+//    {
+//        // horizontal scroll
+//        shouldForwardScroll = YES;
+//    }
+//    else
+//    {
+//        // vertical scroll
+//        if (!self.hasVerticalScroller)
+//        {
+//            shouldForwardScroll = YES;
+//        }
+//    }
+//
+//    if (shouldForwardScroll)
+//    {
+//        
+//        [[self nextResponder] scrollWheel:theEvent];
+//    }
+//    else
+//    {
+//        [super scrollWheel:theEvent];
+//    }
+//}
+
+- (BOOL)isPressedMultipleSelectionCombination:(NSEvent*)theEvent
+{
+    BOOL commandKeyDown = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
+    BOOL shiftKeyDown = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
+    BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
+    BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
+    BOOL isPressedMultipleSelectionCombination = (commandKeyDown && !shiftKeyDown && !controlKeyDown && !optionKeyDown) ||
+    (shiftKeyDown && !commandKeyDown && !controlKeyDown && !optionKeyDown);
+
+    return isPressedMultipleSelectionCombination;
+}
+
 -(void)mouseDown:(NSEvent *)theEvent
 {
     BOOL controlKeyPressed = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
@@ -748,15 +821,12 @@ typedef enum {
     NSPoint localPoint = [collectionContentView convertPoint:[theEvent locationInWindow] fromView: nil];
     firstMouseDownPoint = localPoint;
     
-    BOOL commandKeyDown = ([theEvent modifierFlags] & NSCommandKeyMask) != 0;
-    BOOL shiftKeyDown = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
-    BOOL controlKeyDown = ([theEvent modifierFlags] & NSControlKeyMask) != 0;
-    BOOL optionKeyDown = ([theEvent modifierFlags] & NSAlternateKeyMask) != 0;
     BOOL bNeedUpdateDisplay = NO;
     BOOL clickedOnSelection = NO;
-    BOOL isPressedMultipleSelectionCombination = (commandKeyDown && !shiftKeyDown && !controlKeyDown && !optionKeyDown) ||
-                                    (shiftKeyDown && !commandKeyDown && !controlKeyDown && !optionKeyDown);
-    
+    BOOL isPressedMultipleSelectionCombination = [self isPressedMultipleSelectionCombination:theEvent];
+
+    NSLog(@"isPressedMultipleSelectionCombination=%d", isPressedMultipleSelectionCombination);
+
     IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
     IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
     if (indexSet && itemView){
@@ -775,14 +845,14 @@ typedef enum {
             //This is Finder's behivour.
             if (selecteds.count > 0){
                 bNeedUpdateDisplay = YES;
-                [selecteds removeAllObjects];
+                [self _removeAllSelectedIndexes];
             }
         }
         
         if (indexSet && itemView){
             if ([itemView accpetSelectWithPoint: localPoint]){
                 if (![selecteds containsObject:indexSet]) {
-                    [selecteds addObject:indexSet];
+                    [self _addSelectedIndex:indexSet];
                     bNeedUpdateDisplay = YES;
                     if ([_delegate respondsToSelector:@selector(collectionViewDragPromisedFilesOfTypes:)]) {
                         stateMode = IBCollectionContentViewStateDragging;
@@ -808,8 +878,8 @@ typedef enum {
         }
     }
 
-    if (_selectionMode == IBCollectionViewSelectionNone) {
-        [selecteds removeAllObjects];
+    if (!isPressedMultipleSelectionCombination && _selectionMode == IBCollectionViewSelectionNone) {
+        [self _removeAllSelectedIndexes];
         bNeedUpdateDisplay = YES;
         stateMode = IBCollectionContentViewStateNone;
     }
@@ -860,7 +930,7 @@ typedef enum {
         theEvent = [self.window nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask];
         switch ([theEvent type]) {
             case NSLeftMouseDragged:{
-                keepOn = [self trackMouseDraggedEvent: theEvent];
+                keepOn = [self trackMouseDraggedEvent:theEvent];
                 break;
             }
             case NSLeftMouseUp:
@@ -894,7 +964,9 @@ typedef enum {
     if (stateMode == IBCollectionContentViewStateSelecting){
         
         if (_selectionMode == IBCollectionViewSelectionMulitple) {
-            
+
+            BOOL isPressedMultipleSelectionCombination = [self isPressedMultipleSelectionCombination:event];
+
             if (!_selectionRegionView){
                 _selectionRegionView = [[IBCollectionSelectionRegionView alloc] initWithFrame: self.bounds];
                 [self addSubview: _selectionRegionView];
@@ -920,8 +992,10 @@ typedef enum {
             }
             
             NSArray *itemIndexs = [self itemIndexsWithRect: selectingRegionRect];
-            [selecteds removeAllObjects];
-            [selecteds addObjectsFromArray: itemIndexs];
+            if (!isPressedMultipleSelectionCombination) {
+                [self _removeAllSelectedIndexes];
+            }
+            [self _addSelectedIndexes: itemIndexs];
             
             [self updateDisplayWithRect: self.documentVisibleRect];
             
@@ -1005,6 +1079,9 @@ typedef enum {
 {
     if (dragginWindow) {
         [dragginWindow setFrameOrigin:NSMakePoint(screenPoint.x + 15, screenPoint.y-20)];
+        if (![dragginWindow isVisible]) {
+            [dragginWindow orderFront:nil];
+        }
     }
 }
 
@@ -1042,15 +1119,26 @@ typedef enum {
     NSMutableParagraphStyle *p = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
     [p setAlignment:NSCenterTextAlignment];
     [d setObject:p forKey:NSParagraphStyleAttributeName];
+
     NSAttributedString *str = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%lu", [self.selectedItemIndexSets count]] attributes:d];
     NSSize size = [str size];
-    int w = MAX(size.width, size.height)+4;
-    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(w, w)];
+    size.width = ceil(size.width);
+    size.height = ceil(size.height);
+
+    NSRect rect = NSZeroRect;
+    if (size.width<size.height) {
+        rect = NSMakeRect(0, 0, size.height+8, size.height+8);
+    }
+    else{
+        rect = NSMakeRect(0, 0, size.width+8, size.height+8);
+    }
+
+    NSImage *image = [[NSImage alloc] initWithSize:rect.size];
     [image lockFocus];
-    NSBezierPath *b = [NSBezierPath bezierPathWithOvalInRect:NSMakeRect(0, 0, w, w)];
+    NSBezierPath *b = [NSBezierPath bezierPathWithRoundedRect:rect cornerRadius:rect.size.height/2.0];
     [[NSColor colorWithDeviceRed:242/255.0 green:33/255.0 blue:36/255.0 alpha:1] set];
     [b fill];
-    [str drawInRect:NSMakeRect(2, 3, w-4, w-4)];
+    [str drawInRect:NSMakeRect((int)((rect.size.width-size.width)/2.0), (int)((rect.size.height-size.height)/2.0)+1, size.width, size.height)];
     [image unlockFocus];
     [imageView setImage:image];
     [imageView setImageFrameStyle:NSImageFrameNone];
@@ -1064,9 +1152,11 @@ typedef enum {
     [dragginWindow setLevel:NSScreenSaverWindowLevel];
     [dragginWindow setBackgroundColor:[NSColor clearColor]];
     [[dragginWindow contentView] addSubview:imageView];
-    [dragginWindow setFrameOrigin:NSMakePoint(imageLoc.x+15, imageLoc.y-20)];
-    [dragginWindow orderFront:nil];
-    
+    [dragginWindow setFrameOrigin:NSMakePoint(-1000, -1000)];
+    //[dragginWindow setFrameOrigin:NSMakePoint(imageLoc.x+mouseOffset.width+15, imageLoc.y+ mouseOffset.height -20)];
+    //NSLog(@"imageLoc = %@", NSStringFromPoint(imageLoc));
+    //NSLog(@"imageLoc = %@", NSStringFromPoint(imageLoc));
+
     [super dragImage:anImage at:imageLoc offset:mouseOffset event:theEvent pasteboard:pboard source:sourceObject slideBack:slideBack];
 }
 
@@ -1272,7 +1362,7 @@ typedef enum {
     IBSectionIndexSet *idx = [IBSectionIndexSet sectionIndexSetWithSectionIndex:sectionIndex ItemIndex:itemIndex];
     if (shiftKeyPressed) {
         if(![selecteds containsObject:idx]){
-            [selecteds addObject:idx];
+            [self _addSelectedIndex:idx];
         }
         [self updateDisplayWithRect: collectionContentView.visibleRect];
     }else{
@@ -1477,9 +1567,11 @@ typedef enum {
 -(void)updateDisplayWithRect:(NSRect)rect
 {
     BOOL didSelectionChanged = NO;
+
     NSIndexSet *sectionSet = [self sectionIndexSetWithRect: rect];
     if (isSectionViewMode){
-     
+
+        //Update Sections
         NSInteger sectionIndex = [sectionSet firstIndex];
         while (sectionIndex != NSNotFound) {
             
@@ -1520,12 +1612,14 @@ typedef enum {
                 }
             
             }else {
+                //Update header and bottom view size
                 if (sectionView.hasHeader && sectionView.headerView)
                     [sectionView.headerView setFrameSize: NSMakeSize(self.bounds.size.width, [layoutManager sectionHeaderViewHeight])];
                 if (sectionView.hasBottom && sectionView.bottomView)
                     [sectionView.bottomView setFrameSize: NSMakeSize(self.bounds.size.width, [layoutManager sectionBottomViewHeight])];
                 if (!self.fixedSectionHeaderView)
                     [sectionView trackHeaderViewWithVisibleRect: collectionContentView.visibleRect];
+
 
                 while (itemIndex != NSNotFound) {
                     IBSectionIndexSet *indexSet = [IBSectionIndexSet sectionIndexSetWithSectionIndex: sectionIndex ItemIndex: itemIndex];
@@ -1552,27 +1646,31 @@ typedef enum {
                     }
                     
                     if ([selecteds containsObject: indexSet]){
-                        if (stateMode == IBCollectionContentViewStateSelecting){
-                            NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
-                            
-                            if(tmpRect.size.width <= 0){
-                                tmpRect.size = NSMakeSize(1, tmpRect.size.height);
-                            }
-                            if(tmpRect.size.height <= 0){
-                                tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
-                            }
-                            
-                            if ([itemView accpetSelectWithRect: tmpRect]){
-                                itemView.selected = YES;
-                            }
-                            else{
-                                itemView.selected = NO;
-                                [selecteds removeObject: indexSet];
-                                didSelectionChanged = YES;
-                            }
-                        }else{
-                            itemView.selected = YES;
-                        }
+                        itemView.selected = YES;
+                        //don't update selection in updateDisplay method
+
+//                        if (stateMode == IBCollectionContentViewStateSelecting){
+//                            NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
+//                            
+//                            if(tmpRect.size.width <= 0){
+//                                tmpRect.size = NSMakeSize(1, tmpRect.size.height);
+//                            }
+//                            if(tmpRect.size.height <= 0){
+//                                tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
+//                            }
+//                            
+//                            if ([itemView accpetSelectWithRect: tmpRect]){
+//                                itemView.selected = YES;
+//                            }
+//                            else{
+//                                itemView.selected = NO;
+//                                [selecteds removeObject: indexSet];
+//                                didSelectionChanged = YES;
+//                            }
+//
+//                        }else{
+//                            itemView.selected = YES;
+//                        }
                     }else{
                         itemView.selected = NO;
                     }
@@ -1607,25 +1705,29 @@ typedef enum {
                 [collectionContentView addSubview: itemView];
             }
             if ([selecteds containsObject: indexSet]){
-                if (stateMode == IBCollectionContentViewStateSelecting){
-                    NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
-                    if(tmpRect.size.width <= 0){
-                        tmpRect.size = NSMakeSize(1, tmpRect.size.height);
-                    }
-                    if(tmpRect.size.height <= 0){
-                        tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
-                    }
-                    if ([itemView accpetSelectWithRect: tmpRect]){
-                        itemView.selected = YES;
-                    }
-                    else{
-                        itemView.selected = NO;
-                        [selecteds removeObject: indexSet];
-                        didSelectionChanged = YES;
-                    }
-                }else{
-                    itemView.selected = YES;
-                }
+                itemView.selected = YES;
+                //don't update selection in updateDisplay method
+
+
+//                if (stateMode == IBCollectionContentViewStateSelecting){
+//                    NSRect tmpRect = [itemView convertRect: selectingRegionRect fromView: collectionContentView];
+//                    if(tmpRect.size.width <= 0){
+//                        tmpRect.size = NSMakeSize(1, tmpRect.size.height);
+//                    }
+//                    if(tmpRect.size.height <= 0){
+//                        tmpRect.size = NSMakeSize(tmpRect.size.width, 1);
+//                    }
+//                    if ([itemView accpetSelectWithRect: tmpRect]){
+//                        itemView.selected = YES;
+//                    }
+//                    else{
+//                        itemView.selected = NO;
+//                        [selecteds removeObject: indexSet];
+//                        didSelectionChanged = YES;
+//                    }
+//                }else{
+//                    itemView.selected = YES;
+//                }
             }else{
                 itemView.selected = NO;
             }

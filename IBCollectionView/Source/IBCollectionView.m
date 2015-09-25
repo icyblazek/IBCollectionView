@@ -106,6 +106,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     BOOL isSectionViewMode;
     
     IBSectionIndexSet *lastMovedItemIndexSet;
+    IBSectionIndexSet *lastKeyNavItemIndexSet;//We use this var to track shift + arrow keys's last selection
     NSPoint firstMouseDownPoint;
     IBCollectionSelectionRegionView *_selectionRegionView;
     NSRect selectingRegionRect;
@@ -336,16 +337,32 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
     NSRect visibleRect = [[self contentView] documentVisibleRect];
     //NSRect visibleRect = [self visibleRect]; do not use [self visibleRect]
+    if (isSectionViewMode){
+        IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:0];
+        visibleRect.origin.y += layoutManager.sectionHeaderViewHeight;
+        visibleRect.size.height -= layoutManager.sectionHeaderViewHeight;
+    }
+    
     NSPoint visiblePoint = visibleRect.origin;
+    
     NSRect itemRect = [self itemRectWithIndexSet:indexSet];
-    
     NSRect isRect = NSIntersectionRect(itemRect, visibleRect);
-    
+
     if (!NSEqualRects(isRect, itemRect)) {
         if (itemRect.origin.y < visiblePoint.y){
-            [collectionContentView scrollPoint: NSMakePoint(0, itemRect.origin.y)];
+            if (isSectionViewMode){
+                IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:0];
+                [collectionContentView scrollPoint: NSMakePoint(0, itemRect.origin.y - layoutManager.sectionHeaderViewHeight)];
+            }else{
+                [collectionContentView scrollPoint: NSMakePoint(0, itemRect.origin.y)];
+            }
         }else if (NSMaxY(itemRect) > NSMaxY(visibleRect)){
-            [collectionContentView scrollPoint: NSMakePoint(0, NSMaxY(itemRect) - visibleRect.size.height)];
+            if (isSectionViewMode){
+                IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:0];
+                [collectionContentView scrollPoint: NSMakePoint(0, NSMaxY(itemRect) - visibleRect.size.height - layoutManager.sectionHeaderViewHeight)];
+            }else{
+                [collectionContentView scrollPoint: NSMakePoint(0, NSMaxY(itemRect) - visibleRect.size.height)];
+            }
         }
         //[collectionContentView scrollPoint:itemRect.origin];
     }
@@ -387,11 +404,13 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 - (void)_removeAllSelectedIndexes
 {
+    lastKeyNavItemIndexSet = nil;
     [selecteds removeAllObjects];
 }
 
 - (void)_addSelectedIndex:(IBSectionIndexSet*)idx
 {
+    lastKeyNavItemIndexSet = idx;
     if (![selecteds containsObject:idx]) {
         [selecteds addObject:idx];
     }
@@ -502,6 +521,39 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
         [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
 }
 
+- (void)selectItemWithIndexSet:(IBSectionIndexSet*)idx byExtendingSelection:(BOOL)extendingSelection;
+{
+    IBSectionIndexSet *goodIdx = nil;
+    NSInteger sectionCount = [self sectionCount];
+    if (sectionCount > 0){
+        if (idx.sectionIndex>=0 && idx.sectionIndex<sectionCount) {
+            NSInteger itemCount = [self itemCountInSectionIndex:idx.sectionIndex];
+            if (idx.itemIndex>=0 && idx.itemIndex<itemCount) {
+                goodIdx = idx;
+            }
+        }
+    }else {
+        if (idx.sectionIndex == 0) {
+            NSInteger itemCount = [self itemCountInSectionIndex:0];
+            if (idx.itemIndex>=0 && idx.itemIndex<itemCount) {
+                goodIdx = idx;
+            }
+        }
+    }
+
+    if (goodIdx) {
+        if (extendingSelection) {
+            [self _addSelectedIndexes: @[goodIdx]];
+            [self updateDisplayWithRect: collectionContentView.visibleRect];
+            if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
+                [self.delegate performSelector:@selector(collectionViewSelectionDidChange:) withObject:self];
+        }
+        else{
+            [self selectItemWithIndexSet:goodIdx];
+        }
+    }
+}
+
 - (void)deselectAll:(id)sender
 {
     [self deselect];
@@ -509,6 +561,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 -(void)deselect
 {
+    lastKeyNavItemIndexSet = nil;
     [self _removeAllSelectedIndexes];
     [self updateDisplayWithRect: collectionContentView.visibleRect];
     if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSelectionDidChange:)])
@@ -591,21 +644,23 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 -(NSRect)itemRectWithIndexSet:(IBSectionIndexSet*)indexSet
 {
-    NSRect resultRect = NSZeroRect;
+    NSRect itemRect = NSZeroRect;
     if (isSectionViewMode){
         BOOL isExpand = YES;
         if (_delegate && [_delegate respondsToSelector: @selector(collectionViewSectionIsExpand:SectionIndex:)])
             isExpand = [_delegate collectionViewSectionIsExpand: self SectionIndex: indexSet.sectionIndex];
         if (isExpand){
+            NSRect sectionViewFrame = [[sectionViewCacheFrames objectForKey:@(indexSet.sectionIndex)] rectValue];
             IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex: indexSet.sectionIndex];
-            resultRect = [layoutManager itemRectOfIndex: indexSet.itemIndex];
+            itemRect = [layoutManager itemRectOfIndex: indexSet.itemIndex];
+            itemRect = [self convertItemRect: itemRect fromSectionFrame: sectionViewFrame];
         }
     }
     else{
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:indexSet.sectionIndex];
-        resultRect =  [layoutManager itemRectOfIndex: indexSet.itemIndex];
+        itemRect =  [layoutManager itemRectOfIndex: indexSet.itemIndex];
     }
-    return resultRect;
+    return itemRect;
 }
 
 -(NSArray*)visibleItemIndexSets
@@ -744,7 +799,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
             //{
             //[self onItemViewSingleClick:indexSet];
             if (_delegate && [_delegate respondsToSelector: @selector(collectionViewMenu:IndextSet:)]){
-                menu =  [self.delegate performSelector:@selector(collectionViewMenu:IndextSet:) withObject:self];
+                menu =  [self.delegate performSelector:@selector(collectionViewMenu:IndextSet:) withObject:self withObject:indexSet];
             }
             //}
         }
@@ -824,8 +879,6 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     BOOL bNeedUpdateDisplay = NO;
     BOOL clickedOnSelection = NO;
     BOOL isPressedMultipleSelectionCombination = [self isPressedMultipleSelectionCombination:theEvent];
-
-    NSLog(@"isPressedMultipleSelectionCombination=%d", isPressedMultipleSelectionCombination);
 
     IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
     IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
@@ -1213,7 +1266,8 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 {
     unsigned short keyCode = [theEvent keyCode];
     BOOL shiftKeyPressed = ([theEvent modifierFlags] & NSShiftKeyMask) != 0;
-    shiftKeyPressed = NO;
+    
+    //shiftKeyPressed = NO;
     
     if (selecteds.count == 0){
         __block IBSectionIndexSet *idx = [IBSectionIndexSet sectionIndexSetWithSectionIndex:10000000000 ItemIndex:10000000000];
@@ -1231,9 +1285,17 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
         }];
         [self selectItemWithIndexSet:idx];
         [self scrollToIndexSet:idx];
+        lastKeyNavItemIndexSet = idx;
         return;
     }
     
+    if(lastKeyNavItemIndexSet==nil){
+        lastKeyNavItemIndexSet = [self selectedItemIndexSets].firstObject;
+    }
+    
+    
+    
+    /*
     NSMutableArray *tmpArray = [NSMutableArray arrayWithArray:selecteds];
     [tmpArray sortUsingComparator: ^NSComparisonResult(id obj1, id obj2) {
         IBSectionIndexSet *set1 = obj1;
@@ -1247,7 +1309,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     }];
     IBSectionIndexSet *minIndexSet = [tmpArray firstObject];
     IBSectionIndexSet *maxIndexSet = [tmpArray lastObject];
-    
+    */
     
     NSInteger sectionIndex = 0;
     NSInteger itemIndex = 0;
@@ -1289,8 +1351,9 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
      */
     
     if (keyCode == kVK_LeftArrow){
-        sectionIndex = minIndexSet.sectionIndex;
-        itemIndex = minIndexSet.itemIndex;
+        
+        sectionIndex = lastKeyNavItemIndexSet.sectionIndex;
+        itemIndex = lastKeyNavItemIndexSet.itemIndex;
         //left right arrow can never jump section
         
         //if the itemIndex is not the first column, do this navigation
@@ -1299,8 +1362,8 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
         }
     }
     else if (keyCode == kVK_RightArrow){
-        sectionIndex = maxIndexSet.sectionIndex;
-        itemIndex = maxIndexSet.itemIndex;
+        sectionIndex = lastKeyNavItemIndexSet.sectionIndex;
+        itemIndex = lastKeyNavItemIndexSet.itemIndex;
         //left right arrow can never jump section
         
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:sectionIndex];
@@ -1310,8 +1373,8 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
         }
     }
     else if (keyCode == kVK_UpArrow){
-        sectionIndex = minIndexSet.sectionIndex;
-        itemIndex = minIndexSet.itemIndex;
+        sectionIndex = lastKeyNavItemIndexSet.sectionIndex;
+        itemIndex = lastKeyNavItemIndexSet.itemIndex;
         
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:sectionIndex];
         NSUInteger countOfColumn = [layoutManager countOfColumn];
@@ -1331,8 +1394,8 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     }
     
     else if (keyCode == kVK_DownArrow){
-        sectionIndex = maxIndexSet.sectionIndex;
-        itemIndex = maxIndexSet.itemIndex;
+        sectionIndex = lastKeyNavItemIndexSet.sectionIndex;
+        itemIndex = lastKeyNavItemIndexSet.itemIndex;
         
         IBSectionViewLayoutManager *layoutManager = [self layoutWithSectionIndex:sectionIndex];
         NSUInteger countOfSection = [self sectionCount];
@@ -1369,6 +1432,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
         [self selectItemWithIndexSet:idx];
     }
     [self scrollToIndexSet:idx];
+    lastKeyNavItemIndexSet = idx;
     
 }
 
@@ -1397,7 +1461,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 - (void)didEndScrollNotification:(NSNotification*)n
 {
-    NSLog(@"didEndScrollNotification");
+    //NSLog(@"didEndScrollNotification");
     if (_delegate && [_delegate respondsToSelector: @selector(collectionViewDidEndScroll:)])
         [_delegate collectionViewDidEndScroll:self];
 }

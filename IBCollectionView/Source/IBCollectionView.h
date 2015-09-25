@@ -12,11 +12,11 @@
 #import "IBCollectionSectionView.h"
 #import "IBSectionViewLayoutManager.h"
 
-typedef enum {
+typedef NS_ENUM(NSInteger, IBCollectionViewSelectionMode) {
     IBCollectionViewSelectionNone          = 0,
     IBCollectionViewSelectionSingle        = 1,
     IBCollectionViewSelectionMulitple      = 2,
-} IBCollectionViewSelectionMode;
+};
 
 
 @class IBCollectionView;
@@ -97,6 +97,7 @@ typedef enum {
 - (void)selectAll:(id)sender;
 - (void)selectItemWithIndexSet:(IBSectionIndexSet*)indexSet;
 - (void)selectItemWithIndexSets:(NSArray*)indexSets; //NSArray of IBSectionIndexSet
+- (void)selectItemWithIndexSet:(IBSectionIndexSet*)indexSet byExtendingSelection:(BOOL)extendingSelection;
 
 - (void)deselectAll:(id)sender;
 - (void)deselectItemWithIndexSet:(IBSectionIndexSet*)indexSet;

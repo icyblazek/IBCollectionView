@@ -51,7 +51,7 @@
 
 -(NSUInteger)hash
 {
-    NSUInteger result = (_sectionIndex << 6) | (_itemIndex << 4);
+    NSUInteger result = (_sectionIndex << 16) | (_itemIndex << 0);
     return result;
 }
 

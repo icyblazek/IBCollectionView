@@ -160,6 +160,13 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
                                                      name: NSViewBoundsDidChangeNotification
                                                    object: nil];
 
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(windowStatusChanged:)
+                                                     name:NSWindowDidResignKeyNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(windowStatusChanged:)
+                                                     name:NSWindowDidBecomeKeyNotification object:nil];
+        
 //        [[NSNotificationCenter defaultCenter] addObserver: self
 //                                                 selector: @selector(didEndLiveScrollNotification:)
 //                                                     name: NSScrollViewDidEndLiveScrollNotification
@@ -178,6 +185,16 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 -(void)dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+}
+
+- (void)windowStatusChanged:(id)n
+{
+    [visibleItemViews enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+        if ([obj isKindOfClass:[IBCollectionItemView class]]) {
+            IBCollectionItemView *itemView = obj;
+            [itemView windowStatusChanged];
+        }
+    }];
 }
 
 -(void)registerNib:(NSBundle *)nib forViewReuseIdentifier:(NSString *)identifier
@@ -423,16 +440,23 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 - (void)_addSelectedIndexes:(NSArray*)idxes
 {
-    for (IBSectionIndexSet *idx in idxes) {
-        if (![selecteds containsObject:idx]) {
-            [selecteds addObject:idx];
+    @try {
+        for (IBSectionIndexSet *idx in idxes) {
+            if (![selecteds containsObject:idx]) {
+                [selecteds addObject:idx];
+            }
+        }
+        
+        NSMutableDictionary *d = [NSMutableDictionary dictionary];
+        for (IBSectionIndexSet *idx in selecteds) {
+            NSAssert(d[@(idx.hash)] == nil, @"duplicate index !?");
+            [d setObject:idx forKey:@(idx.hash)];
         }
     }
-
-    NSMutableDictionary *d = [NSMutableDictionary dictionary];
-    for (IBSectionIndexSet *idx in selecteds) {
-        NSAssert(d[@(idx.hash)] == nil, @"duplicate index !?");
-        [d setObject:idx forKey:@(idx.hash)];
+    @catch (NSException *exception) {
+        NSLog(@"e=%@", exception);
+    }
+    @finally {
     }
 }
 
@@ -883,6 +907,7 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
     IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
     IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
     if (indexSet && itemView){
+        [itemView mouseDown:theEvent];//send mouseDown event to itemView
         localPoint = [itemView convertPoint: localPoint fromView: collectionContentView];
         if ([itemView accpetSelectWithPoint: localPoint]){
             if ([selecteds containsObject:indexSet]) {
@@ -1000,6 +1025,16 @@ typedef NS_ENUM(NSInteger, IBCollectionContentViewState) {
 
 -(void)mouseUp:(NSEvent *)theEvent
 {
+    {
+        //send mouseUp event to itemView
+        NSPoint localPoint = [collectionContentView convertPoint:[theEvent locationInWindow] fromView: nil];
+        IBSectionIndexSet *indexSet = [self itemIndexSetWithPoint: localPoint];
+        IBCollectionItemView *itemView = [self itemViewWithIndexSet:indexSet];
+        if (indexSet && itemView){
+            [itemView mouseUp:theEvent];
+        }
+    }
+
     if (_selectionRegionView){
         [_selectionRegionView removeFromSuperview];
         _selectionRegionView = nil;
